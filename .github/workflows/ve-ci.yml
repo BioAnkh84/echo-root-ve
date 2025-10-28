@@ -1,0 +1,50 @@
+﻿name: VE CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ve-check:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps (none required)
+        run: python -V
+
+      - name: Quick ledger tail (if present)
+        shell: pwsh
+        run: |
+          if (Test-Path .\ve_ledger.jsonl) {
+            Write-Host "=== tail ve_ledger.jsonl ==="
+            Get-Content .\ve_ledger.jsonl -Tail 20
+          } else {
+            Write-Host "No ve_ledger.jsonl yet."
+          }
+
+      - name: Run schema/chain checks
+        shell: pwsh
+        run: |
+          if (-not (Test-Path .\ve_schema_check.py)) {
+            Write-Error "ve_schema_check.py missing"; exit 1
+          }
+           = 1.38
+           = Get-ChildItem -Recurse -Filter *.jsonl | Select-Object -Expand FullName
+          if (-not ) {
+            Write-Host "No JSONL ledgers found. Passing (nothing to check)."
+            exit 0
+          }
+           = 0
+          foreach ( in ) {
+            Write-Host "=== Checking  ==="
+            python .\ve_schema_check.py --ledger "" --psi-min 
+            if (128 -ne 0) {  = 1 }
+          }
+          exit 
