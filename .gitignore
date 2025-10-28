@@ -1,12 +1,15 @@
-﻿# OS/Editor
-.DS_Store
+# Windows
 Thumbs.db
-*.tmp
-~$*
-# Python
-__pycache__/
-*.pyc
+Desktop.ini
+
 # PowerShell
-*.ps1.code-workspace
-# OneDrive temp files
-*.lnk
+*.pshistory
+
+# Temp/logs from VE runs
+*.log
+*.tmp
+*.out.txt
+*.err.txt
+
+# Editors
+.vscode/
