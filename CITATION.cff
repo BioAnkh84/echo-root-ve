@@ -1,0 +1,10 @@
+﻿cff-version: 1.2.0
+title: "Vulpine Echo Kernel (VE)"
+message: "If you use this project, please cite it."
+type: software
+authors:
+  - family-names: Rice
+    given-names: Richard
+repository-code: "https://github.com/BioAnkh84/echo-root-ve"
+version: "v0.1a"
+date-released: "2025-10-28"
