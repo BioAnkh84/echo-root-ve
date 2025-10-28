@@ -1,0 +1,14 @@
+﻿name: Bug report
+description: File a bug report
+labels: bug
+body:
+  - type: textarea
+    id: what-happened
+    attributes: { label: What happened?, description: Include exact command, output, and expected result. }
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes: { label: VE version/tag, placeholder: v0.1a }
+  - type: input
+    id: env
+    attributes: { label: Environment, placeholder: Windows 10 / PowerShell 5.1 }

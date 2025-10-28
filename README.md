@@ -31,3 +31,6 @@ PowerShell 5.1–safe test kernel for Echo Root OS (**ψ_min = 1.38**).
 - `0` = success
 - `10/11` = literal check fail
 - `99` = internal audit error
+## Badges
+[![CI](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ve-ci.yml/badge.svg)](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ve-ci.yml)
+[![Release](https://img.shields.io/github/v/release/BioAnkh84/echo-root-ve)](https://github.com/BioAnkh84/echo-root-ve/releases)
