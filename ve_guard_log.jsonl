@@ -1,0 +1,4 @@
+{"timestamp":"2025-10-28T12:52:37.0497983-04:00","decision":"allow","reason":"ok","cmd":"Set-Content -Path \".\\ve_data\\hello.txt\" -Value \"ok-1\""}
+{"timestamp":"2025-10-28T12:52:37.7248162-04:00","decision":"allow","reason":"ok","cmd":"Write-Output \"nope\""}
+{"timestamp":"2025-10-28T12:52:38.1602029-04:00","decision":"allow","reason":"ok","cmd":"Set-Content -Path \".\\ve_data\\..\\hello2.txt\" -Value \"nope\""}
+{"timestamp":"2025-10-28T12:52:38.5736763-04:00","decision":"allow","reason":"ok","cmd":"Set-Content -Path \".\\ve_data\\Sub Dir\\file.txt\" -Value \"ok-2\""}
