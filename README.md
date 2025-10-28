@@ -1,5 +1,7 @@
 ﻿[![VE Schema Check](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ci.yml/badge.svg)](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ci.yml)
 
+[![VE Schema Check](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ci.yml/badge.svg)](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ci.yml)
+
 # Vulpine Echo Kernel v0.1a
 
 PowerShell 5.1–safe test kernel for Echo Root OS (**ψ_min = 1.38**).
