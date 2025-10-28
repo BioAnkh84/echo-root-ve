@@ -1,0 +1,3 @@
+{"consent":"","hash_self":"f9adb753b49bee1642a65031d2adbf53032cb2b5adc54cbfe4c7594a951a50fc","type":"GENESIS","rho":0,"time":"2025-10-28T05:50:25","gamma":0,"actor":"VE","hash_prev":"0000000000000000000000000000000000000000000000000000000000000000","event":"INIT","delta":0}
+{"hash_prev":"f9adb753b49bee1642a65031d2adbf53032cb2b5adc54cbfe4c7594a951a50fc","time":"2025-10-28T05:50:25","hash_self":"3630a4e4a7934bc3bec853363b8d3d80d8f3b3ae9f0be1ca4390f815fb379e99","type":"LOW_PSI","delta":0.1,"rho":0.5,"gamma":0.6,"consent":"","actor":"VE"}
+

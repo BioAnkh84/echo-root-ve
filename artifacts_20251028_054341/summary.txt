@@ -1,0 +1,21 @@
+﻿Vulpine Echo — Artifact Summary (10/28/2025 05:43:42)
+psi_min = 1.38
+
+PASS: FAIL
+  - DATA_ERROR: Invalid JSON
+
+FAIL_HASH: FAIL
+  - DATA_ERROR: Invalid JSON
+  - INTEGRITY_ERROR: hash_self mismatch
+
+FAIL_JSON: FAIL
+  - DATA_ERROR: Invalid JSON
+
+FAIL_PSI: FAIL
+  - DATA_ERROR: Invalid JSON
+
+Done. Reports:
+  - C:\Users\User\OneDrive\Documents\Ciphers stuff\VE_Test_Suite_v0.1a\artifacts_20251028_054341\FAIL_HASH_report.txt
+  - C:\Users\User\OneDrive\Documents\Ciphers stuff\VE_Test_Suite_v0.1a\artifacts_20251028_054341\FAIL_JSON_report.txt
+  - C:\Users\User\OneDrive\Documents\Ciphers stuff\VE_Test_Suite_v0.1a\artifacts_20251028_054341\FAIL_PSI_report.txt
+  - C:\Users\User\OneDrive\Documents\Ciphers stuff\VE_Test_Suite_v0.1a\artifacts_20251028_054341\PASS_report.txt

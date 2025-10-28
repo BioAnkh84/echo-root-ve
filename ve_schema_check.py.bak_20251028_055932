@@ -1,0 +1,66 @@
+# ve_schema_check.py
+# Validates ledger schema + chain + psi floor
+
+import argparse, json, hashlib, sys
+
+REQ_FIELDS = ["time","hash_prev","hash_self","rho","gamma","delta","type","actor","consent"]
+
+def sha256(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--ledger", default="ledger.jsonl")
+    ap.add_argument("--psi-min", type=float, default=1.38)
+    args = ap.parse_args()
+
+    ok = True
+    prev = None
+    line_num = 0
+    with open(args.ledger, "r", encoding="utf-8") as f:
+        for raw in f:
+            raw = raw.strip()
+            if not raw: continue
+            line_num += 1
+            try:
+                obj = json.loads(raw)
+            except Exception as e:
+                print(f"[ERROR] L{line_num}: invalid JSON: {e}")
+                ok = False
+                continue
+
+            # Field presence
+            for k in REQ_FIELDS:
+                if k not in obj:
+                    print(f"[ERROR] L{line_num}: missing field '{k}'")
+                    ok = False
+
+            # Chain
+            if prev and obj.get("hash_prev") != prev.get("hash_self"):
+                print(f"[ERROR] L{line_num}: hash_prev != previous hash_self")
+                ok = False
+
+            # Recompute hash_self from object w/o hash_self
+            check_obj = {k:v for k,v in obj.items() if k != "hash_self"}
+            recomputed = sha256(json.dumps(check_obj, separators=(',',':'), ensure_ascii=False))
+            if obj.get("hash_self") != recomputed:
+                print(f"[ERROR] L{line_num}: hash_self mismatch")
+                ok = False
+
+            # psi floor heuristic
+            if "rho" in obj and "gamma" in obj:
+                psi_eff = float(obj["rho"]) + float(obj["gamma"])
+                if psi_eff < args.psi_min:
+                    print(f"[WARN]  L{line_num}: psi_eff={psi_eff:.2f} < psi_min={args.psi_min:.2f}")
+
+            prev = obj
+
+    if ok:
+        print("[OK] Schema + chain verified.")
+        sys.exit(0)
+    else:
+        print("[FAIL] Issues found. See messages above.")
+        sys.exit(2)
+
+if __name__ == "__main__":
+    main()

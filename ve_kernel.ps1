@@ -1,0 +1,191 @@
+# ve_kernel.ps1 — Vulpine Echo v1.1 kernel (exec | status | audit)
+param(
+  [ValidateSet('exec','status','audit')]
+  [string]$Command = 'status',
+  [string]$Ledger  = '.\ve_ledger.jsonl',
+  [string]$Policy  = '.\policy.ve.psl',
+  [string]$ExtLang,
+  [string]$Target,
+  [string]$Exec,          # command line to run (quoted)
+  [double]$Rho = 0.0,
+  [double]$Gamma = 0.0,
+  [double]$Delta = 0.0,
+  [double]$PsiScore = -1.0,  # if < 0, compute as Rho+Gamma
+  [int]$MaxRuntimeSecs = 60,
+  [switch]$StrictPsi,     # treat psi breach as FAIL
+  [switch]$Quiet
+)
+
+$ErrorActionPreference = 'Stop'
+
+function IsoUtcNow(){ [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ') }
+function Write-NoBom([string]$Path,[string]$Text){ [System.IO.File]::WriteAllText($Path,$Text,[System.Text.UTF8Encoding]::new($false)) }
+function Append-NoBomLine([string]$Path,[string]$Text){ [System.IO.File]::AppendAllText($Path,$Text + [Environment]::NewLine,[System.Text.UTF8Encoding]::new($false)) }
+function Get-Sha256([string]$text){ ($b=[Text.Encoding]::UTF8.GetBytes($text); $s=[Security.Cryptography.SHA256]::Create(); ($s.ComputeHash($b)|%{ $_.ToString('x2') }) -join '') }
+function Get-FileSha256([string]$path){ if(-not (Test-Path $path)){ return "" }; (Get-FileHash -Algorithm SHA256 $path).Hash.ToLower() }
+
+function Read-Policy([string]$path){
+  $obj = [ordered]@{ floor=1.38; allow=@('powershell','python','bash'); max_runtime_secs=60 }
+  if(Test-Path $path){
+    $txt = Get-Content $path -Raw
+    $m = [regex]::Match($txt,'(?ms)^\[psi\].*?floor\s*=\s*([0-9\.]+)')
+    if($m.Success){ $obj.floor = [double]$m.Groups[1].Value }
+    $m = [regex]::Match($txt,'(?ms)^\[ext\].*?allow\s*=\s*\[([^\]]*)\]')
+    if($m.Success){
+      $obj.allow = ($m.Groups[1].Value -split ',') | % { $_.Trim().Trim('"').Trim("'") } | ? { $_ -ne '' }
+    }
+    $m = [regex]::Match($txt,'(?ms)^\[ext\].*?max_runtime_secs\s*=\s*([0-9]+)')
+    if($m.Success){ $obj.max_runtime_secs = [int]$m.Groups[1].Value }
+    $obj.hash = (Get-Sha256($txt))
+  } else {
+    $obj.hash = ""
+  }
+  return $obj
+}
+
+function Get-LastSeqHash([string]$ledger){
+  if(-not (Test-Path $ledger)){ return @{ seq=0; hash="" } }
+  $lines = Get-Content $ledger
+  if($lines.Count -eq 0){ return @{ seq=0; hash="" } }
+  $last = $lines[-1] | ConvertFrom-Json
+  return @{ seq = [int]$last.seq; hash = [string]$last.hash_self }
+}
+
+function With-Lock([ScriptBlock]$Body){
+  $lockPath = Join-Path (Split-Path -Parent $Ledger) 've_ledger.lock'
+  $fs = $null
+  try{
+    $fs = [System.IO.File]::Open($lockPath,[System.IO.FileMode]::OpenOrCreate,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::None)
+    & $Body
+  } finally {
+    if($fs){ $fs.Close(); $fs.Dispose() }
+  }
+}
+
+function Make-GenesisIfNeeded(){
+  if(Test-Path $Ledger -and (Get-Item $Ledger).Length -gt 0){ return }
+  $ts = IsoUtcNow()
+  $gen = [ordered]@{
+    seq=1
+    timestamp_utc=$ts
+    hash_prev=("0"*64)
+    hash_self=""
+    hash_policy=""
+    action="GENESIS"
+    target=""
+    status="OK"
+    exit_code=0
+    psi_score=0.0
+    ext_lang=""
+    ext_hash=""
+  }
+  $jsonCompact = ($gen | ConvertTo-Json -Compress)
+  $gen.hash_self = Get-Sha256($jsonCompact)
+  $jsonCompact = ($gen | ConvertTo-Json -Compress)
+  Append-NoBomLine $Ledger $jsonCompact
+}
+
+switch($Command){
+  'status' {
+    if(-not (Test-Path $Ledger)){ Write-Host "No ledger yet."; exit 0 }
+    $lines = Get-Content $Ledger
+    $tail = $lines | Select-Object -Last 5
+    if(-not $Quiet){ $tail }
+    exit 0
+  }
+
+  'audit' {
+    $py = (Get-Command python -ErrorAction SilentlyContinue).Source
+    if(-not $py){ $py = (Get-Command py -ErrorAction SilentlyContinue).Source }
+    if(-not $py){ Write-Error "Python not found (FAIL_ENV)"; exit 2 }
+    & $py ".\ve_schema_check.py" "--ledger" $Ledger "--psi-min" (Read-Policy $Policy).floor @(
+        $StrictPsi.IsPresent ? "--strict-psi" : ""
+      ) 2>&1
+    exit $LASTEXITCODE
+  }
+
+  'exec' {
+    $policy = Read-Policy $Policy
+    $psiMin = $policy.floor
+    if([string]::IsNullOrEmpty($ExtLang)){
+      if($Exec -match '^\s*python\b'){ $ExtLang='python' }
+      elseif($Exec -match '^\s*powershell\b'){ $ExtLang='powershell' }
+      elseif($Exec -match '^\s*bash\b'){ $ExtLang='bash' }
+      else { $ExtLang='powershell' }
+    }
+    if($policy.allow -notcontains $ExtLang){ Write-Error "FAIL_ENV: ext_lang '$ExtLang' not allowed by policy"; exit 2 }
+
+    if($PsiScore -lt 0){ $PsiScore = [Math]::Round(($Rho + $Gamma),2) }
+
+    $cmd = $Exec
+    if([string]::IsNullOrWhiteSpace($cmd)){
+      Write-Error "FAIL_ENV: Exec command is empty"
+      exit 2
+    }
+
+    With-Lock {
+      Make-GenesisIfNeeded()
+      $latest = Get-LastSeqHash $Ledger
+      $seq = $latest.seq + 1
+      $prevHash = $latest.hash
+      $ts = IsoUtcNow()
+      $extHash = ""
+      if($Target -and (Test-Path $Target)){ $extHash = Get-FileSha256 $Target }
+
+      $ps = New-Object System.Diagnostics.Process
+      $psi = New-Object System.Diagnostics.ProcessStartInfo
+      $psi.FileName = "powershell.exe"
+      $psi.Arguments = "-NoProfile -NonInteractive -Command `"$cmd`""
+      $psi.RedirectStandardOutput = $true
+      $psi.RedirectStandardError  = $true
+      $psi.UseShellExecute = $false
+      $psi.CreateNoWindow = $true
+      $ps.StartInfo = $psi
+      $ps.Start() | Out-Null
+      if(-not $ps.WaitForExit($policy.max_runtime_secs * 1000)){
+        try { $ps.Kill() } catch {}
+        $exitCode = 124
+      } else {
+        $exitCode = $ps.ExitCode
+      }
+      $stdout = $ps.StandardOutput.ReadToEnd()
+      $stderr = $ps.StandardError.ReadToEnd()
+
+      $status = "OK"
+      if($exitCode -ne 0){ $status = "FAIL_EXIT" }
+      elseif($PsiScore -lt $psiMin -and $StrictPsi){ $status = "FAIL_PSI" }
+
+      $rec = [ordered]@{
+        seq = $seq
+        timestamp_utc = $ts
+        hash_prev = $prevHash
+        hash_self = ""
+        hash_policy = $policy.hash
+        action = "exec"
+        target = ($Target ?? "")
+        status = $status
+        exit_code = $exitCode
+        psi_score = [double]$PsiScore
+        ext_lang = $ExtLang
+        ext_hash = $extHash
+      }
+      $json = ($rec | ConvertTo-Json -Compress)
+      $rec.hash_self = Get-Sha256($json)
+      $json = ($rec | ConvertTo-Json -Compress)
+      Append-NoBomLine $Ledger $json
+
+      if(-not $Quiet){
+        "`n--- VE EXEC REPORT ---"
+        "seq=$seq, exit_code=$exitCode, status=$status"
+        "stdout:"
+        $stdout
+        "stderr:"
+        $stderr
+      }
+      & python ".\ve_schema_check.py" "--ledger" $Ledger "--psi-min" $psiMin @(
+        $StrictPsi.IsPresent ? "--strict-psi" : ""
+      ) 2>&1 | Out-Host
+      exit $LASTEXITCODE
+    }
+  }
+}

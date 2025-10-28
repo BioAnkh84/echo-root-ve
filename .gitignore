@@ -1,0 +1,12 @@
+﻿# OS/Editor
+.DS_Store
+Thumbs.db
+*.tmp
+~$*
+# Python
+__pycache__/
+*.pyc
+# PowerShell
+*.ps1.code-workspace
+# OneDrive temp files
+*.lnk

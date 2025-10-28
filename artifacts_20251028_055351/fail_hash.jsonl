@@ -1,0 +1,5 @@
+{"consent":"","hash_self":"26a3edc2892fe789d65d6db46ae06fe7fa6850a6db4a7d0162d4999d3112898f","type":"GENESIS","rho":0,"time":"2025-10-28T05:53:51","gamma":0,"actor":"VE","hash_prev":"0000000000000000000000000000000000000000000000000000000000000000","event":"INIT","delta":0}
+{"hash_prev":"26a3edc2892fe789d65d6db46ae06fe7fa6850a6db4a7d0162d4999d3112898f","time":"2025-10-28T05:53:51","hash_self":"3939cc31f102e2de98d15676dd523465947225519f397c0967fb1b55888e49f7","type":"PASS","delta":0.21,"rho":0.92,"gamma":0.82,"consent":"","actor":"VE"}
+
+{"hash_prev":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef","time":"2025-10-28T05:53:51","hash_self":"cfb4d6510844528d6c13faf32a95e87252c6c43e9e5d9a986872fa3b472df512","type":"PASS","delta":0.25,"rho":0.9,"gamma":0.8,"consent":"","actor":"VE"}
+

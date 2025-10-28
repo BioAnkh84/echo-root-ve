@@ -1,0 +1,20 @@
+﻿Vulpine Echo — Artifact Summary (10/28/2025 05:53:51)
+psi_min = 1.38
+
+PASS: PASS
+  - OK
+
+FAIL_HASH: PASS
+  - OK
+
+FAIL_JSON: FAIL
+  - DATA_ERROR: Invalid JSON
+
+FAIL_PSI: PASS
+  - POLICY_WARN: psi below floor
+
+Done. Reports:
+  - C:\Users\User\OneDrive\Documents\Ciphers stuff\VE_Test_Suite_v0.1a\artifacts_20251028_055351\FAIL_HASH_report.txt
+  - C:\Users\User\OneDrive\Documents\Ciphers stuff\VE_Test_Suite_v0.1a\artifacts_20251028_055351\FAIL_JSON_report.txt
+  - C:\Users\User\OneDrive\Documents\Ciphers stuff\VE_Test_Suite_v0.1a\artifacts_20251028_055351\FAIL_PSI_report.txt
+  - C:\Users\User\OneDrive\Documents\Ciphers stuff\VE_Test_Suite_v0.1a\artifacts_20251028_055351\PASS_report.txt

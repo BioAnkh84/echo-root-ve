@@ -1,0 +1,14 @@
+# policy.ve.psl — VE Policy Spec (example)
+version = "1.0"
+
+[psi]
+floor = 1.38
+warn  = 1.50
+
+[ext]
+allow = ["powershell","python","bash"]
+max_runtime_secs = 60
+
+[targets]
+allow = ["C:\\Users\\User\\**","/etc/**"]
+deny  = ["*.exe","/boot/**"]
