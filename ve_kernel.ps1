@@ -1,4 +1,21 @@
-﻿# ve_kernel.ps1 — VE execution wrapper (quotes/spaces safe via -EncodedCommand)
+﻿# --- Python dispatcher (prefer Python core if available) ---
+# Works when invoked as a script (PSScriptRoot) or via & .\ve_kernel.ps1 (MyInvocation) or from current dir.
+$scriptRoot = $PSScriptRoot
+if (-not $scriptRoot) { $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $scriptRoot) { $scriptRoot = $PWD }
+
+$vePy = Join-Path $scriptRoot 've_kernel.py'
+
+if ((Test-Path -LiteralPath $vePy) -and (Get-Command python -ErrorAction SilentlyContinue)) {
+  try {
+    & python $vePy @args
+    exit $LASTEXITCODE
+  } catch {
+    # fall back to the PowerShell implementation below
+  }
+}
+# --- end dispatcher ---
+# ve_kernel.ps1 — VE execution wrapper (quotes/spaces safe via -EncodedCommand)
 
 # Auto-import VE.Guard if available (non-fatal if missing)
 try {
