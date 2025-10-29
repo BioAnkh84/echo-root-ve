@@ -1,36 +1,14 @@
-﻿[![VE Schema Check](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ci.yml/badge.svg)](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ci.yml)
+﻿# Vulpine Echo Kernel (VE)
+**Version 0.1b — Python-First Trust Kernel**
 
-[![VE Schema Check](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ci.yml/badge.svg)](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ci.yml)
+Core test harness for the **Echo Root OS** autonomy framework.  
+Implements guard, audit, and Python bridge for reproducible self-verification.
 
-# Vulpine Echo Kernel v0.1a
+---
 
-PowerShell 5.1–safe test kernel for Echo Root OS (**ψ_min = 1.38**).
-
-## Commands
-- `.\ve_kernel.ps1 status` — prints READY
-- `.\ve_kernel.ps1 exec "<cmd>"` — runs inline command
-- `.\ve_kernel.ps1 audit` — silent self-test (exit code only)
-- `.\ve_kernel.ps1 audit-verbose` — key=value test output
-
-## Quickstart
+## 🔧 Quick Start
 ```powershell
-# status
-.\ve_kernel.ps1 status
+git clone https://github.com/BioAnkh84/echo-root-ve.git
+cd echo-root-ve
+.\ve_kernel.ps1 quickcheck
 
-# exec
-.\ve_kernel.ps1 exec '"hello world"'
-
-# audit (quiet: exit code only)
-.\ve_kernel.ps1 audit; $LASTEXITCODE
-
-# audit-verbose (prints lines)
-.\ve_kernel.ps1 audit-verbose
-```
-
-## Exit codes
-- `0` = success
-- `10/11` = literal check fail
-- `99` = internal audit error
-## Badges
-[![CI](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ve-ci.yml/badge.svg)](https://github.com/BioAnkh84/echo-root-ve/actions/workflows/ve-ci.yml)
-[![Release](https://img.shields.io/github/v/release/BioAnkh84/echo-root-ve)](https://github.com/BioAnkh84/echo-root-ve/releases)
