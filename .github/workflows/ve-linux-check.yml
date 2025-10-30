@@ -1,0 +1,24 @@
+name: VE Linux check
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+jobs:
+  ve-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make VE scripts executable (safety)
+        run: chmod +x ./ve_kernel.sh ./ve_parse.sh
+
+      - name: Audit
+        run: ./ve_parse.sh audit
+
+      - name: Plain run
+        run: ./ve_parse.sh run echo "linux ok"
+
+      - name: Envelope run
+        run: ./ve_parse.sh run --envelope echo "linux sealed ok"
