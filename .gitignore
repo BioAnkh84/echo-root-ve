@@ -12,4 +12,17 @@ Desktop.ini
 *.err.txt
 
 # Editors
-.vscode/
+.vscode/# local dev junk
+*.bak
+*.broken_backup
+*.bak_*
+ve_ledger.jsonl.bak_*
+/checkpoints/
+/secrets/
+/echo-root-ve/
+/QUICKCHECK_LOGS/
+/artifacts_*/
+open_ledger.ps1
+ve_fix_and_check.ps1
+ve_fix_and_check2.ps1
+ve_all_in_one.ps1
