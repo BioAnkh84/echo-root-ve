@@ -1,85 +1,205 @@
-﻿# --- Python dispatcher (prefer Python core if available) ---
-# Works when invoked as a script (PSScriptRoot) or via & .\ve_kernel.ps1 (MyInvocation) or from current dir.
-$scriptRoot = $PSScriptRoot
-if (-not $scriptRoot) { $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
-if (-not $scriptRoot) { $scriptRoot = $PWD }
+﻿param(
+  [Parameter(Position=0)]
+  [string]$Mode = "",
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$Rest
+)
 
-$vePy = Join-Path $scriptRoot 've_kernel.py'
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
 
-if ((Test-Path -LiteralPath $vePy) -and (Get-Command python -ErrorAction SilentlyContinue)) {
-  try {
-    & python $vePy @args
-    exit $LASTEXITCODE
-  } catch {
-    # fall back to the PowerShell implementation below
-  }
-}
-# --- end dispatcher ---
-# ve_kernel.ps1 — VE execution wrapper (quotes/spaces safe via -EncodedCommand)
+$RootDir        = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Ledger         = Join-Path $RootDir "ve_ledger.jsonl"
+$PolicyFile     = Join-Path $RootDir "policies\ve_policy.json"
+$CheckpointDir  = Join-Path $RootDir "checkpoints"
+$SecretsDir     = Join-Path $RootDir "secrets"
+$SharedKeyFile  = Join-Path $SecretsDir "ve_shared.key"
 
-# Auto-import VE.Guard if available (non-fatal if missing)
-try {
-  $guard = Join-Path $PSScriptRoot "Modules\VE.Guard\VE.Guard.psd1"
-  if (Test-Path $guard) { Import-Module $guard -Force | Out-Null }
-} catch {}
-
-function Invoke-Child {
-  [CmdletBinding()]
-  param(
-    [Parameter(Mandatory)][string]$Command,
-    [string]$ShellPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe",
-    [switch]$PwshCore,
-    [string]$WorkingDirectory,
-    [int]$TimeoutSec = 15,
-    [switch]$NoGuard,
-    [string]$StdOutPath,
-    [string]$StdErrPath
-  )
-
-  # Guard only when the command looks like a write/bypass attempt
-  $needsGuard = $Command -match '(?i)\b(Set-Content|Add-Content|Out-File)\b|(?<!\S)(?:\d?>|>>)|\s--%\s'
-  if (-not $NoGuard -and $needsGuard) {
-    if (-not (Get-Command Assert-VeSafeWrite -ErrorAction SilentlyContinue)) {
-      throw "Invoke-Child: VE Guard not loaded. Import VE.Guard or pass -NoGuard (not recommended)."
-    }
-    Assert-VeSafeWrite $Command
-  }
-
-  if ($PwshCore) { $ShellPath = "pwsh.exe" }
-  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Command))
-  $argLine = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $encoded"
-
-  $psi = @{ FilePath=$ShellPath; ArgumentList=$argLine; PassThru=$true; WindowStyle='Hidden' }
-  if ($WorkingDirectory) { $psi.WorkingDirectory = $WorkingDirectory }
-  if ($StdOutPath)       { $psi.RedirectStandardOutput = $StdOutPath }
-  if ($StdErrPath)       { $psi.RedirectStandardError  = $StdErrPath }
-
-  $p = Start-Process @psi
-  if ($TimeoutSec -gt 0) {
-    if (-not $p.WaitForExit($TimeoutSec * 1000)) { try { $p.Kill() } catch {}; throw "Invoke-Child: timed out after $TimeoutSec s" }
+function Get-PolicyHash {
+  if (Test-Path -LiteralPath $PolicyFile) {
+    $bytes = [System.IO.File]::ReadAllBytes($PolicyFile)
+    $sha   = [System.Security.Cryptography.SHA256]::Create()
+    $hash  = $sha.ComputeHash($bytes)
+    return -join ($hash | ForEach-Object { $_.ToString("x2") })
   } else {
-    $p.WaitForExit()
+    return "no-policy"
   }
-  return $p.ExitCode
 }
 
-function Invoke-ChildAsync {
-  [CmdletBinding()]
+function Get-VESecret {
+  if (Test-Path -LiteralPath $SharedKeyFile) {
+    return (Get-Content $SharedKeyFile -Raw -Encoding ascii)
+  } else {
+    return ""
+  }
+}
+
+function New-VEHmac {
   param(
-    [Parameter(Mandatory)][string]$Command,
-    [switch]$PwshCore,
-    [switch]$NoGuard
+    [string]$Data,
+    [string]$Key
   )
-  $needsGuard = $Command -match '(?i)\b(Set-Content|Add-Content|Out-File)\b|(?<!\S)(?:\d?>|>>)|\s--%\s'
-  if (-not $NoGuard -and $needsGuard) {
-    if (-not (Get-Command Assert-VeSafeWrite -ErrorAction SilentlyContinue)) {
-      throw "Invoke-ChildAsync: VE Guard not loaded."
-    }
-    Assert-VeSafeWrite $Command
-  }
-  $shell = if ($PwshCore) { 'pwsh.exe' } else { "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" }
-  $enc   = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($Command))
-  Start-Process -FilePath $shell -ArgumentList "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $enc" -PassThru -WindowStyle Hidden
+  if (-not $Key) { return "" }
+  $hmac = New-Object System.Security.Cryptography.HMACSHA256
+  $hmac.Key = [Text.Encoding]::UTF8.GetBytes($Key)
+  $hashBytes = $hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($Data))
+  return -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
 }
 
-function Enter-VE { Set-Location $PSScriptRoot; "VE root: $((Get-Location).Path)" }
+function New-VECrossTalkEnvelope {
+  param(
+    [string]$PayloadJson
+  )
+  $ts     = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+  $ph     = Get-PolicyHash
+  $nonce  = [guid]::NewGuid().ToString()
+  $secret = Get-VESecret
+
+  $env = [ordered]@{
+    ver         = 1
+    ts          = $ts
+    policy_hash = $ph
+    nonce       = $nonce
+    payload     = $PayloadJson
+  }
+
+  $body = ($env | ConvertTo-Json -Compress)
+  $sig  = New-VEHmac -Data $body -Key $secret
+  $env.sig = $sig
+
+  return ($env | ConvertTo-Json -Compress)
+}
+
+function Write-Ledger {
+  param(
+    [string]$Status,
+    [string]$Action,
+    [string]$Message
+  )
+  $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+  $ph = Get-PolicyHash
+  $obj = [ordered]@{
+    ts          = $ts
+    status      = $Status
+    action      = $Action
+    policy_hash = $ph
+    msg         = $Message
+  }
+  $json = $obj | ConvertTo-Json -Compress
+  Add-Content -LiteralPath $Ledger -Value $json
+}
+
+function Invoke-Audit {
+  $qc = Join-Path $RootDir "QUICKCHECK_LOGS"
+  if (Test-Path -LiteralPath $qc) {
+    Write-Host "[AUDIT] OK"
+    Write-Ledger "ok" "audit" "QUICKCHECK_LOGS present"
+    exit 0
+  } else {
+    Write-Host "[AUDIT] missing QUICKCHECK_LOGS"
+    Write-Ledger "fail" "audit" "QUICKCHECK_LOGS missing"
+    exit 20
+  }
+}
+
+function Invoke-Revert {
+  param([int]$Seq)
+  $cp = Join-Path $CheckpointDir ("cp_{0}.json" -f $Seq)
+  if (-not (Test-Path -LiteralPath $cp)) {
+    Write-Host "[REVERT] no checkpoint"
+    Write-Ledger "fail" "revert" "no checkpoint for seq=$Seq"
+    exit 1
+  }
+  try {
+    $json = Get-Content $cp -Raw | ConvertFrom-Json
+  } catch {
+    Write-Host "[REVERT] checkpoint corrupt: $cp"
+    Write-Ledger "abort" "revert" "corrupt checkpoint: $cp"
+    exit 30
+  }
+  $script:psi_eff = [double]$json.psi_eff
+  Write-Host "[REVERT] restored seq=$Seq ψ_eff=$script:psi_eff"
+  Write-Ledger "ok" "revert" "restored seq=$Seq ψ_eff=$script:psi_eff"
+  exit 0
+}
+
+function Invoke-Exec {
+  param(
+    [string[]]$CmdParts,
+    [switch]$Envelope
+  )
+
+  if (-not $CmdParts -or $CmdParts.Count -eq 0) {
+    Write-Host "VE kernel: empty exec command"
+    Write-Ledger "fail" "exec" "empty exec command"
+    exit 1
+  }
+
+  $CmdParts = $CmdParts | Where-Object { $_ -ne "--ve:envelope" }
+
+  $cmd    = $CmdParts -join " "
+  $output = ""
+  $rc     = 0
+
+  try {
+    $output = Invoke-Expression $cmd 2>&1
+  } catch {
+    $output = $_.Exception.Message
+    $rc = 1
+  }
+
+  if ($rc -ne 0) {
+    $output | Write-Output
+    Write-Ledger "fail" "exec" ("rc={0}; out={1}" -f $rc, $output)
+    if ($Envelope) {
+      $payload = @{ rc = $rc; out = $output } | ConvertTo-Json -Compress
+      $envJson = New-VECrossTalkEnvelope -PayloadJson $payload
+      $envJson | Write-Output
+    }
+    exit $rc
+  }
+  else {
+    if ($Envelope) {
+      $payload = @{ rc = 0; out = $output } | ConvertTo-Json -Compress
+      $envJson = New-VECrossTalkEnvelope -PayloadJson $payload
+      $envJson | Write-Output
+    } else {
+      $output | Write-Output
+    }
+    Write-Ledger "ok" "exec" ("rc=0; out={0}" -f $output)
+    exit 0
+  }
+}
+
+switch ($Mode) {
+  "audit" {
+    Invoke-Audit
+  }
+  "revert" {
+    $seq = if ($Rest.Count -gt 0) { [int]$Rest[0] } else { 0 }
+    Invoke-Revert -Seq $seq
+  }
+  "policy-hash" {
+    Get-PolicyHash
+  }
+  "exec" {
+    $useEnv = $false
+    if ($Rest.Count -gt 0 -and $Rest[0] -eq "-Envelope") {
+      $useEnv = $true
+      if ($Rest.Count -gt 1) {
+        $Rest = $Rest[1..($Rest.Count - 1)]
+      } else {
+        $Rest = @()
+      }
+    }
+    Invoke-Exec -CmdParts $Rest -Envelope:$useEnv
+  }
+  default {
+    Write-Host "Vulpine Echo (Windows) kernel — clean"
+    Write-Host "  .\ve_kernel.ps1 exec <cmd...>"
+    Write-Host "  .\ve_kernel.ps1 exec -Envelope <cmd...>"
+    Write-Host "  .\ve_kernel.ps1 audit"
+    Write-Host "  .\ve_kernel.ps1 revert <seq>"
+    Write-Host "  .\ve_kernel.ps1 policy-hash"
+  }
+}
