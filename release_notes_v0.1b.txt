@@ -1,0 +1,19 @@
+﻿Vulpine Echo Kernel (VE) — v0.1b  
+Python-first, auditable test kernel for Echo Root OS.
+
+### Highlights
+- Python core dispatcher (`ve_kernel.py`) with clean `exec` routing
+- Built-in `quickcheck` self-test (PASS/FAIL + non-zero exit on failure)
+- Quiet `audit` + deterministic `audit-verbose` (“one=one”, “two=two”)
+- PowerShell 5.1–safe dual dispatcher (PS → Python)
+- Minimal, reproducible outputs (great for CI and peer review)
+
+### Quickstart
+```powershell
+git clone https://github.com/BioAnkh84/echo-root-ve.git
+cd echo-root-ve
+.\ve_kernel.ps1 quickcheck
+
+
+@
+
