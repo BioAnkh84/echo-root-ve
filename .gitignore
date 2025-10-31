@@ -26,3 +26,12 @@ open_ledger.ps1
 ve_fix_and_check.ps1
 ve_fix_and_check2.ps1
 ve_all_in_one.ps1
+# VE local / lab stuff
+checkpoints/
+secrets/
+echo-root-ve/
+policies/
+*.bak
+ve_ledger.jsonl.bak*
+*.broken_backup
+*.tmp
