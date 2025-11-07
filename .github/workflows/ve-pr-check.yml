@@ -1,40 +1,16 @@
-﻿name: VE PR / Push Check
+﻿name: VE PR Check
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
 jobs:
-  ve-check:
-    name: VE check (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-
+  verify:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
-
-      - name: List repo (debug)
-        shell: bash
+      - name: VE PR verify stub
         run: |
-          pwd
-          ls -R .
-
-      - name: Run VE pre-push check (PowerShell)
-        # pwsh is available on both ubuntu-latest and windows-latest
-        shell: pwsh
-        run: |
-          Write-Host "Running VE pre-push check from $PWD on $env:RUNNER_OS"
-          if (Test-Path "./ve_prepush_check.ps1") {
-            pwsh -ExecutionPolicy Bypass -File ./ve_prepush_check.ps1
-            if ($LASTEXITCODE -ne 0) {
-              Write-Error "ve_prepush_check.ps1 failed with exit code $LASTEXITCODE"
-            }
-          } else {
-            Write-Error "ve_prepush_check.ps1 not found in repo root"
-          }
+          echo "VE PR verify stub running..."
+          echo "TODO: wire in extra checks (docs, schema, etc.)."

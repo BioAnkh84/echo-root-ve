@@ -1,0 +1,18 @@
+﻿name: VE Linux check
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+jobs:
+  ve-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: VE Linux stub
+        run: |
+          echo "Vulpine Echo Linux check stub running..."
+          echo "TODO: hook up real VE Linux tests here."
