@@ -14,12 +14,14 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Prepare QUICKCHECK_LOGS dir
-        run: |
-          mkdir -p QUICKCHECK_LOGS
-          echo "QUICKCHECK_LOGS=$PWD/QUICKCHECK_LOGS" >> $GITHUB_ENV
-
       - name: Run VE Linux audit
         run: |
+          # Point QUICKCHECK_LOGS at a local dir and ensure it exists
+          export QUICKCHECK_LOGS="$PWD/QUICKCHECK_LOGS"
+          mkdir -p "$QUICKCHECK_LOGS"
+
+          # Make sure our scripts are executable
           chmod +x ./ve_parse.sh ./ve_kernel.sh
+
+          # Run the audit
           ./ve_parse.sh audit
