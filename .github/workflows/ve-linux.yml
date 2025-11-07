@@ -16,12 +16,11 @@ jobs:
 
       - name: Run VE Linux audit
         run: |
-          # Point QUICKCHECK_LOGS at a local dir and ensure it exists
-          export QUICKCHECK_LOGS="$PWD/QUICKCHECK_LOGS"
-          mkdir -p "$QUICKCHECK_LOGS"
+          # Create logs dir
+          mkdir -p "$PWD/QUICKCHECK_LOGS"
 
-          # Make sure our scripts are executable
+          # Make sure scripts are executable
           chmod +x ./ve_parse.sh ./ve_kernel.sh
 
-          # Run the audit
-          ./ve_parse.sh audit
+          # Run with QUICKCHECK_LOGS env set for this process
+          QUICKCHECK_LOGS="$PWD/QUICKCHECK_LOGS" ./ve_parse.sh audit
