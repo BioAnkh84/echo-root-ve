@@ -22,7 +22,7 @@ def stable_json(obj) -> str:
 
 
 def legacy_json(obj) -> str:
-    # Legacy fallback: compact but ASCII-escaped (common historical default)
+    # Legacy fallback: compact but ASCII-escaped
     return json.dumps(obj, separators=(",", ":"), ensure_ascii=True)
 
 
@@ -72,7 +72,6 @@ def main() -> int:
                 recomputed = sha256_utf8(canon)
 
                 if obj.get("hash_self") != recomputed:
-                    # Optional legacy fallback
                     if args.allow_legacy_hash:
                         leg = legacy_json(check_obj)
                         recomputed_legacy = sha256_utf8(leg)
@@ -86,6 +85,10 @@ def main() -> int:
                         ok = False
 
                 prev_hash = obj.get("hash_self")
+
+                # Skip ψ warning on GENESIS
+                if obj.get("type") == "GENESIS":
+                    continue
 
                 # 3) optional ψ-eff warning (stub only)
                 rho = None
