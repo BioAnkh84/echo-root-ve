@@ -3,9 +3,8 @@
 # Minimal ledger checker:
 #  - validates hash_prev continuity
 #  - recomputes hash_self from stable JSON (excluding hash_self)
-#  - optional ψ-eff warning (stub): rho+gamma, prefers *_bps fields when present
-#
-# Patch posture (v1.0.3): tolerate fixed-point basis points while remaining backwards compatible.
+#  - Patch posture: tolerates *_bps fields
+#  - Compatibility: optional legacy hash fallback (for older ledgers)
 
 import argparse
 import json
@@ -17,8 +16,17 @@ def sha256_utf8(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
+def stable_json(obj) -> str:
+    # Patch canonical: UTF-8, compact, no ASCII-forcing
+    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+def legacy_json(obj) -> str:
+    # Legacy fallback: compact but ASCII-escaped (common historical default)
+    return json.dumps(obj, separators=(",", ":"), ensure_ascii=True)
+
+
 def as_float(obj, key):
-    """Best-effort numeric conversion."""
     try:
         return float(obj[key])
     except Exception:
@@ -29,6 +37,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ledger", default="ledger.jsonl")
     ap.add_argument("--psi-min", type=float, default=1.38, help="ψ minimum warning threshold (stub: rho+gamma)")
+    ap.add_argument("--allow-legacy-hash", action="store_true",
+                    help="If set, accept legacy hash_self computed with ensure_ascii=True")
     args = ap.parse_args()
 
     ok = True
@@ -40,12 +50,10 @@ def main() -> int:
             for raw_line in f:
                 line_num += 1
 
-                # Strip whitespace and BOM (handles UTF-8 BOM safely)
                 line = raw_line.strip().lstrip("\ufeff")
                 if not line:
                     continue
 
-                # Parse JSON safely
                 try:
                     obj = json.loads(line)
                 except Exception as e:
@@ -58,19 +66,28 @@ def main() -> int:
                     print(f"[ERROR] Line {line_num}: hash_prev does not match previous hash_self")
                     ok = False
 
-                # 2) recompute expected hash_self using stable JSON form (no hash_self)
+                # 2) recompute expected hash_self (canonical)
                 check_obj = {k: v for k, v in obj.items() if k != "hash_self"}
-                stable = json.dumps(check_obj, separators=(",", ":"), ensure_ascii=False)
-                recomputed = sha256_utf8(stable)
+                canon = stable_json(check_obj)
+                recomputed = sha256_utf8(canon)
 
                 if obj.get("hash_self") != recomputed:
-                    print(f"[ERROR] Line {line_num}: hash_self mismatch (expected recomputed)")
-                    ok = False
+                    # Optional legacy fallback
+                    if args.allow_legacy_hash:
+                        leg = legacy_json(check_obj)
+                        recomputed_legacy = sha256_utf8(leg)
+                        if obj.get("hash_self") != recomputed_legacy:
+                            print(f"[ERROR] Line {line_num}: hash_self mismatch (canonical+legacy)")
+                            ok = False
+                        else:
+                            print(f"[WARN] Line {line_num}: hash_self matches legacy serializer (accepted).")
+                    else:
+                        print(f"[ERROR] Line {line_num}: hash_self mismatch (canonical). Use --allow-legacy-hash if needed.")
+                        ok = False
 
                 prev_hash = obj.get("hash_self")
 
                 # 3) optional ψ-eff warning (stub only)
-                # Prefer fixed-point basis points if present; else use float fields.
                 rho = None
                 gamma = None
 
