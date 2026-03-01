@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# CI-safe default: ensure QUICKCHECK_LOGS exists
+: ""
+mkdir -p ""
+
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
