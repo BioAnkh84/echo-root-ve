@@ -12,30 +12,24 @@ Desktop.ini
 *.err.txt
 
 # Editors
-.vscode/# local dev junk
+.vscode/
+
+# Local dev junk
 *.bak
 *.broken_backup
 *.bak_*
-ve_ledger.jsonl.bak_*
-/checkpoints/
-/secrets/
-/echo-root-ve/
-/QUICKCHECK_LOGS/
-/artifacts_*/
-open_ledger.ps1
-ve_fix_and_check.ps1
-ve_fix_and_check2.ps1
-ve_all_in_one.ps1
+ve_ledger.jsonl.bak*
+*.tmp
+_tmp_ledger.jsonl
+
 # VE local / lab stuff
 checkpoints/
 secrets/
 echo-root-ve/
 policies/
-*.bak
-ve_ledger.jsonl.bak*
-*.broken_backup
-*.tmp
-_tmp_ledger.jsonl
+checkpoints/
+secrets/
+
 # Runtime ledgers (never commit)
 ve_ledger.jsonl
 ledger.jsonl
@@ -46,3 +40,6 @@ legacy/*.jsonl
 
 # One-off repair utilities (keep local only)
 tools_repair_ledger.py
+
+# Governance runtime
+governance_ttl.json
