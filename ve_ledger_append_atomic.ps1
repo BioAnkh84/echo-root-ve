@@ -4,8 +4,9 @@
 #  - Stable UTF-8 hashing
 #  - Optional *_bps fixed-point fields (basis points) while preserving legacy float fields
 #  - Deterministic rounding (no locale formatting)
-#  - Stable JSON serialization via Newtonsoft.Json (PowerShell 5.1 compatible)
-#  - No silent fallbacks (fail loudly if serializer not available)
+#  - Stable JSON serialization:
+#       * PowerShell 7+ : System.Text.Json (preferred)
+#       * PowerShell 5.1: Newtonsoft.Json if available (optional); otherwise fail loudly
 
 param(
     [string]$LedgerPath = "ledger.jsonl",
@@ -33,27 +34,28 @@ $ErrorActionPreference = "Stop"
 
 . "$PSScriptRoot\ve_atomic_io.ps1"
 
-# --- Stable JSON + UTF-8 SHA256 helpers (Patch-safe) ---
-
-function Assert-Newtonsoft {
-    try {
-        Add-Type -AssemblyName "Newtonsoft.Json" -ErrorAction Stop | Out-Null
-    } catch {
-        throw "Newtonsoft.Json not available. Install it (or run under a PS7+ build that includes System.Text.Json). Details: $($_.Exception.Message)"
-    }
-}
-
 function Convert-ToStableJson {
     param([Parameter(Mandatory=$true)] $Obj)
 
-    Assert-Newtonsoft
+    # Prefer System.Text.Json when available (PowerShell 7+)
+    $stj = [type]::GetType("System.Text.Json.JsonSerializer, System.Text.Json", $false)
+    if ($stj) {
+        $opt = [System.Text.Json.JsonSerializerOptions]::new()
+        $opt.WriteIndented = $false
+        $opt.Encoder = [System.Text.Encodings.Web.JavaScriptEncoder]::UnsafeRelaxedJsonEscaping
+        return [System.Text.Json.JsonSerializer]::Serialize($Obj, $opt)
+    }
 
-    $settings = New-Object Newtonsoft.Json.JsonSerializerSettings
-    $settings.Formatting = [Newtonsoft.Json.Formatting]::None
-    # Do not force ASCII; keep UTF-8 characters when possible (aligns with ensure_ascii=False intent)
-    $settings.StringEscapeHandling = [Newtonsoft.Json.StringEscapeHandling]::Default
-
-    return [Newtonsoft.Json.JsonConvert]::SerializeObject($Obj, $settings)
+    # Optional fallback: Newtonsoft.Json (PowerShell 5.1)
+    try {
+        Add-Type -AssemblyName "Newtonsoft.Json" -ErrorAction Stop | Out-Null
+        $settings = New-Object Newtonsoft.Json.JsonSerializerSettings
+        $settings.Formatting = [Newtonsoft.Json.Formatting]::None
+        $settings.StringEscapeHandling = [Newtonsoft.Json.StringEscapeHandling]::Default
+        return [Newtonsoft.Json.JsonConvert]::SerializeObject($Obj, $settings)
+    } catch {
+        throw "No stable JSON serializer available. Run with PowerShell 7+ (pwsh), or provide Newtonsoft.Json for PS5.1. Details: $($_.Exception.Message)"
+    }
 }
 
 function Get-Sha256Utf8 {
@@ -98,7 +100,7 @@ $mutex = New-Object System.Threading.Mutex($false, "Global\VulpineEchoLedgerMute
 $hasHandle = $false
 
 try {
-    $hasHandle = $mutex.WaitOne(5000) # 5s
+    $hasHandle = $mutex.WaitOne(5000)
     if (-not $hasHandle) { throw "Timeout acquiring ledger mutex" }
 
     # Genesis if missing
@@ -141,12 +143,11 @@ try {
         $delta_bps = [Nullable[int]](To-Bps $delta)
     }
 
-    # Canonicalize floats to 2 decimals (keeps legacy intent, avoids locale formatting)
+    # Canonicalize floats to 2 decimals (legacy intent)
     $rho2   = Round2 (Clamp-01 $rho)
     $gamma2 = Round2 (Clamp-01 $gamma)
     $delta2 = Round2 (Clamp-01 $delta)
 
-    # Ordered entry for deterministic key order
     $entry = [ordered]@{
         time      = (Get-Date).ToString("s")
         type      = $etype
@@ -158,14 +159,12 @@ try {
         hash_prev = $prevHash
     }
 
-    # Optional bps emission
     if ($haveBps -or $EmitBps.IsPresent) {
         $entry["rho_bps"]   = $rho_bps.Value
         $entry["gamma_bps"] = $gamma_bps.Value
         $entry["delta_bps"] = $delta_bps.Value
     }
 
-    # Hash of stable JSON excluding hash_self (not present yet)
     $jsonNoHash = Convert-ToStableJson $entry
     $entry["hash_self"] = Get-Sha256Utf8 $jsonNoHash
 
