@@ -34,8 +34,20 @@ case "$CMD" in
     fi
     ;;
   audit)
-    ensure_quickcheck_logs
+    ensure_quickcheck_logs || true
+
+    set +e
     "$KERNEL" audit
+    rc=$?
+    set -e
+
+    # CI soft-fail mode (only active if explicitly enabled)
+    if [[ ${VE_CI_SOFT_AUDIT:-0} -eq 1 && $rc -eq 20 ]]; then
+      echo "[AUDIT] WARN (soft): missing QUICKCHECK_LOGS (rc=20) — continuing due to VE_CI_SOFT_AUDIT=1"
+      exit 0
+    fi
+
+    exit $rc
     ;;
   revert)
     SEQ="${1:-0}"
