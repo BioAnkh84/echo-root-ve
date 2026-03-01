@@ -1,24 +1,16 @@
 ﻿name: VE PR Check
+
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches: [ "main" ]
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-      - name: Run VE checks
-        run: python .github/ve_checks.py
-      - name: Upload VE artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ve-quickcheck
-          path: |
-            QUICKCHECK_LOGS/**
-            SHA256_MANIFEST.txt
-            ve_ledger.jsonl
-          if-no-files-found: ignore
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: VE PR verify stub
+        run: |
+          echo "VE PR verify stub running..."
+          echo "TODO: wire in extra checks (docs, schema, etc.)."

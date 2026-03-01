@@ -1,0 +1,26 @@
+﻿name: VE Linux check
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+jobs:
+  ve-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run VE Linux audit
+        run: |
+          # Create logs dir
+          mkdir -p "$PWD/QUICKCHECK_LOGS"
+
+          # Make sure scripts are executable
+          chmod +x ./ve_parse.sh ./ve_kernel.sh
+
+          # Run with QUICKCHECK_LOGS env set for this process
+          QUICKCHECK_LOGS="$PWD/QUICKCHECK_LOGS" ./ve_parse.sh audit
