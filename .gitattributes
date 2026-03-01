@@ -1,16 +1,2 @@
-# Normalize line endings on checkout/commit
-* text=auto
-
-# Powershell as text
-*.ps1 text eol=crlf
-*.psm1 text eol=crlf
-*.psd1 text eol=crlf
-
-# Python as text with LF
-*.py text eol=lf
-
-# Treat these as binary
-*.png binary
-*.jpg binary
-*.zip binary
-*.jsonl text
+*.sh text eol=lf
+.gitattributes text eol=lf
