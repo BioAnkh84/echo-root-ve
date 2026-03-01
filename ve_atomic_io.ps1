@@ -46,3 +46,40 @@ function Add-JsonLineAtomically {
     # Replace original atomically
     Move-Item -Path $tmp -Destination $Path -Force
 }
+
+function Add-JsonLineAtomicallyText {
+    param(
+        [Parameter(Mandatory=$true)][string]$Path,
+        [Parameter(Mandatory=$true)][string]$Text
+    )
+
+    $dir = Split-Path -Parent $Path
+    if ($dir -and -not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    }
+
+    $tmp = "$Path.tmp.$([guid]::NewGuid().ToString('N'))"
+
+    # Copy existing ledger to temp first (preserves previous content exactly)
+    if (Test-Path $Path) {
+        [System.IO.File]::Copy($Path, $tmp, $true)
+    } else {
+        # Ensure temp exists as empty file
+        [System.IO.File]::WriteAllBytes($tmp, @())
+    }
+
+    # Append exact bytes (UTF-8, no BOM), always newline-terminated
+    $line = $Text.TrimStart([char]0xFEFF).TrimEnd("`r","`n") + "`n"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($line)
+    $fs = [System.IO.File]::Open($tmp, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read)
+    try {
+        $fs.Write($bytes, 0, $bytes.Length)
+        $fs.Flush($true)
+    } finally {
+        $fs.Dispose()
+    }
+
+    # Atomic replace on same volume via rename
+    Move-Item -Force -Path $tmp -Destination $Path
+}
+
