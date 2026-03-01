@@ -84,5 +84,19 @@ def main() -> int:
     return 0
 
 
+# --- PATCH: tracked-only runtime artifact check (PS/CI hardened) ---
+import subprocess
+
+def _tracked(paths):
+    out = subprocess.check_output(["git","ls-files","-z","--"] + list(paths))
+    items = [p for p in out.decode("utf-8", errors="replace").split("\x00") if p]
+    return set(items)
+
+tracked = _tracked(["ve_ledger.jsonl","ledger.jsonl"])
+if tracked:
+    print("[FAIL] Runtime artifacts are tracked (should be ignored): " + ", ".join(sorted(tracked)))
+    raise SystemExit(20)
+# --- END PATCH ---
 if __name__ == "__main__":
     raise SystemExit(main())
+
