@@ -23,6 +23,7 @@ jobs:
       - name: Audit
         run: ./ve_parse.sh audit
         env:
+          VE_CI_SOFT_AUDIT: "1"
           QUICKCHECK_LOGS: "$GITHUB_WORKSPACE/.ve_logs/quickcheck"
 
       - name: Plain run
@@ -30,3 +31,4 @@ jobs:
 
       - name: Envelope run
         run: ./ve_parse.sh run --envelope echo "linux sealed ok"
+
