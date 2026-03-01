@@ -47,7 +47,6 @@ def get_rgdelta(obj):
         if db is not None:
             delta = db / 10000.0
 
-    # Fallback to floats if needed
     if rho is None and "rho" in obj:
         rho = as_float(obj, "rho")
     if gamma is None and "gamma" in obj:
@@ -58,24 +57,21 @@ def get_rgdelta(obj):
     return rho, gamma, delta
 
 
-def derive_phase(obj, rho, gamma, delta):
+def derive_phase(line_num, obj, rho, gamma, delta):
     """Patch v1.0.3 posture: derived state only (no progression)."""
     if obj.get("type") == "GENESIS":
-        return "GENESIS"
+        return "GENESIS" if line_num == 1 else "ANCHOR"
 
-    # Missing metrics => cannot safely derive
     if rho is None or gamma is None or delta is None:
         return "RED"
 
-    # Hard red band
     if delta > 0.40:
         return "RED"
 
-    # Amber bands (mirror your existing gate posture)
     if delta > 0.30:
         return "AMBER"
+
     if rho < 0.70 or gamma < 0.70:
-        # keep a slightly softer amber band around the threshold
         if rho >= 0.65 and gamma >= 0.65:
             return "AMBER"
         return "RED"
@@ -114,17 +110,14 @@ def main() -> int:
                     ok = False
                     continue
 
-                # 1) hash_prev continuity
                 if prev_hash is not None and obj.get("hash_prev") != prev_hash:
                     print(f"[ERROR] Line {line_num}: hash_prev does not match previous hash_self")
                     ok = False
 
-                # Chain-only mode skips recomputation
                 if args.chain_only:
                     prev_hash = obj.get("hash_self")
                     continue
 
-                # 2) recompute expected hash_self (canonical)
                 check_obj = {k: v for k, v in obj.items() if k != "hash_self"}
                 recomputed = sha256_utf8(stable_json(check_obj))
 
@@ -142,17 +135,14 @@ def main() -> int:
 
                 prev_hash = obj.get("hash_self")
 
-                # Optional derived phase display
                 rho, gamma, delta = get_rgdelta(obj)
                 if args.show_phase:
-                    phase = derive_phase(obj, rho, gamma, delta)
+                    phase = derive_phase(line_num, obj, rho, gamma, delta)
                     print(f"[PHASE] Line {line_num}: {phase}")
 
-                # Skip ψ warning on GENESIS
                 if obj.get("type") == "GENESIS":
                     continue
 
-                # 3) optional ψ-eff warning (stub only)
                 if rho is not None and gamma is not None:
                     psi_eff = rho + gamma
                     if psi_eff < args.psi_min:
