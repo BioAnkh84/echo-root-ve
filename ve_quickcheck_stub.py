@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # ve_quickcheck_stub.py
-# Minimal ledger checker:
+# Patch-ready ledger checker (v1.0.3 posture):
 #  - validates hash_prev continuity
-#  - recomputes hash_self from stable JSON (excluding hash_self)
-#  - Patch posture: tolerates *_bps fields
-#  - Compatibility: optional legacy hash fallback + chain-only verification
-#  - Derived phase (read-only): no progression mechanics, derived from (rho,gamma,delta) + optional governance TTL
+#  - recomputes hash_self from canonical stable JSON (excluding hash_self)
+#  - tolerates *_bps fields (basis points) while remaining backwards compatible
+#  - optional legacy hash fallback + chain-only mode for non-canonical legacy ledgers
+#  - derived phase (read-only): no progression mechanics
+#  - optional governance TTL file -> EXPIRED phase when TTL elapsed
 
 import argparse
 import json
@@ -34,7 +35,6 @@ def as_float(obj, key):
 
 
 def parse_utc(ts: str) -> datetime:
-    # Accept "Z" suffix or explicit offset
     if ts.endswith("Z"):
         ts = ts[:-1] + "+00:00"
     return datetime.fromisoformat(ts).astimezone(timezone.utc)
@@ -96,7 +96,6 @@ def derive_phase(line_num, obj, rho, gamma, delta, expired: bool):
 
     if delta > 0.40:
         return "RED"
-
     if delta > 0.30:
         return "AMBER"
 
@@ -113,9 +112,9 @@ def main() -> int:
     ap.add_argument("--ledger", default="ledger.jsonl")
     ap.add_argument("--psi-min", type=float, default=1.38, help="ψ minimum warning threshold (stub: rho+gamma)")
     ap.add_argument("--allow-legacy-hash", action="store_true",
-                    help="If set, accept legacy hash_self computed with ensure_ascii=True")
+                    help="Accept legacy hash_self computed with ensure_ascii=True")
     ap.add_argument("--chain-only", action="store_true",
-                    help="Only validate hash_prev continuity; do not recompute hash_self (compat for non-canonical legacy ledgers)")
+                    help="Only validate hash_prev continuity; do not recompute hash_self")
     ap.add_argument("--show-phase", action="store_true",
                     help="Print derived phase per line (read-only; no progression mechanics).")
     ap.add_argument("--ttl-file", default=None,
@@ -175,6 +174,7 @@ def main() -> int:
                     phase = derive_phase(line_num, obj, rho, gamma, delta, expired)
                     print(f"[PHASE] Line {line_num}: {phase}")
 
+                # Skip ψ warning for GENESIS/ANCHOR semantics
                 if obj.get("type") == "GENESIS":
                     continue
 
