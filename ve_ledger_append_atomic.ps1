@@ -33,6 +33,11 @@ $ErrorActionPreference = "Stop"
 
 . "$PSScriptRoot\ve_atomic_io.ps1"
 
+# GENESIS guard (Patch-safe): do not allow GENESIS entries on an existing ledger.
+# This prevents accidental double-genesis and keeps history semantics explicit.
+if ((Test-Path $LedgerPath) -and ($etype -eq "GENESIS")) {
+    throw "Refusing to append GENESIS to existing ledger: $LedgerPath. Use a normal EVENT or a distinct ANCHOR type."
+}
 function Convert-ToStableJson {
     param([Parameter(Mandatory=$true)] $Obj)
 
@@ -156,3 +161,4 @@ finally {
     if ($hasHandle) { $mutex.ReleaseMutex() | Out-Null }
     $mutex.Dispose()
 }
+
