@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# CI-safe: ensure QUICKCHECK_LOGS is non-empty and exists (handles empty or unset)
+ensure_quickcheck_logs() {
+  if [ -z "" ]; then
+    QUICKCHECK_LOGS="E:\Echo_Nexus_Data\repos\echo-root-ve/.ve_logs/quickcheck"
+  fi
+  mkdir -p ""
+}
 
 # CI-safe default: ensure QUICKCHECK_LOGS exists
 : ""
