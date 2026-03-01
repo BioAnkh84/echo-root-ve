@@ -5,11 +5,13 @@
 #  - recomputes hash_self from stable JSON (excluding hash_self)
 #  - Patch posture: tolerates *_bps fields
 #  - Compatibility: optional legacy hash fallback + chain-only verification
-#  - Derived phase (read-only): no progression mechanics, purely derived from (rho,gamma,delta)
+#  - Derived phase (read-only): no progression mechanics, derived from (rho,gamma,delta) + optional governance TTL
 
 import argparse
 import json
 import hashlib
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 
 def sha256_utf8(s: str) -> str:
@@ -31,8 +33,33 @@ def as_float(obj, key):
         return None
 
 
+def parse_utc(ts: str) -> datetime:
+    # Accept "Z" suffix or explicit offset
+    if ts.endswith("Z"):
+        ts = ts[:-1] + "+00:00"
+    return datetime.fromisoformat(ts).astimezone(timezone.utc)
+
+
+def load_ttl(path: str | None):
+    if not path:
+        return None
+    p = Path(path)
+    if not p.exists():
+        return None
+    obj = json.loads(p.read_text(encoding="utf-8"))
+    affirmed = parse_utc(obj["affirmed_utc"])
+    ttl_days = int(obj.get("ttl_days", 30))
+    return affirmed, ttl_days
+
+
+def ttl_expired(ttl_state) -> bool:
+    if not ttl_state:
+        return False
+    affirmed, ttl_days = ttl_state
+    return datetime.now(timezone.utc) > (affirmed + timedelta(days=ttl_days))
+
+
 def get_rgdelta(obj):
-    """Return (rho,gamma,delta) as floats if available, preferring *_bps."""
     rho = gamma = delta = None
 
     if "rho_bps" in obj and "gamma_bps" in obj:
@@ -57,8 +84,10 @@ def get_rgdelta(obj):
     return rho, gamma, delta
 
 
-def derive_phase(line_num, obj, rho, gamma, delta):
-    """Patch v1.0.3 posture: derived state only (no progression)."""
+def derive_phase(line_num, obj, rho, gamma, delta, expired: bool):
+    if expired:
+        return "EXPIRED"
+
     if obj.get("type") == "GENESIS":
         return "GENESIS" if line_num == 1 else "ANCHOR"
 
@@ -89,7 +118,12 @@ def main() -> int:
                     help="Only validate hash_prev continuity; do not recompute hash_self (compat for non-canonical legacy ledgers)")
     ap.add_argument("--show-phase", action="store_true",
                     help="Print derived phase per line (read-only; no progression mechanics).")
+    ap.add_argument("--ttl-file", default=None,
+                    help="Optional governance TTL json (e.g., governance_ttl.json). If expired, phase becomes EXPIRED.")
     args = ap.parse_args()
+
+    ttl_state = load_ttl(args.ttl_file)
+    expired = ttl_expired(ttl_state)
 
     ok = True
     prev_hash = None
@@ -136,8 +170,9 @@ def main() -> int:
                 prev_hash = obj.get("hash_self")
 
                 rho, gamma, delta = get_rgdelta(obj)
+
                 if args.show_phase:
-                    phase = derive_phase(line_num, obj, rho, gamma, delta)
+                    phase = derive_phase(line_num, obj, rho, gamma, delta, expired)
                     print(f"[PHASE] Line {line_num}: {phase}")
 
                 if obj.get("type") == "GENESIS":
