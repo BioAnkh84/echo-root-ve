@@ -35,3 +35,4 @@ policies/
 ve_ledger.jsonl.bak*
 *.broken_backup
 *.tmp
+_tmp_ledger.jsonl
