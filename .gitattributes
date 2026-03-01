@@ -1,2 +1,2 @@
-# Force LF for shell scripts
 *.sh text eol=lf
+.gitattributes text eol=lf
