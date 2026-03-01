@@ -14,11 +14,21 @@ jobs:
       - name: Make VE scripts executable (safety)
         run: chmod +x ./ve_kernel.sh ./ve_parse.sh
 
+      - name: Set QUICKCHECK_LOGS (CI default)
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.ve_logs/quickcheck"
+          echo "QUICKCHECK_LOGS=$GITHUB_WORKSPACE/.ve_logs/quickcheck" >> "$GITHUB_ENV"
+
       - name: Audit
         run: ./ve_parse.sh audit
+        env:
+          VE_CI_SOFT_AUDIT: "1"
+          QUICKCHECK_LOGS: "$GITHUB_WORKSPACE/.ve_logs/quickcheck"
 
       - name: Plain run
         run: ./ve_parse.sh run echo "linux ok"
 
       - name: Envelope run
         run: ./ve_parse.sh run --envelope echo "linux sealed ok"
+
