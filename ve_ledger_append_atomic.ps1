@@ -4,9 +4,8 @@
 #  - Stable UTF-8 hashing
 #  - Optional *_bps fixed-point fields (basis points) while preserving legacy float fields
 #  - Deterministic rounding (no locale formatting)
-#  - Stable JSON serialization:
-#       * PowerShell 7+ : System.Text.Json (preferred)
-#       * PowerShell 5.1: Newtonsoft.Json if available (optional); otherwise fail loudly
+#  - Canonical JSON via System.Text.Json under pwsh (preferred)
+#  - Write EXACT canonical JSON line to ledger so quickcheck recomputation matches
 
 param(
     [string]$LedgerPath = "ledger.jsonl",
@@ -21,7 +20,7 @@ param(
     [Nullable[int]]$gamma_bps = $null,
     [Nullable[int]]$delta_bps = $null,
 
-    # Emit BPS fields even if only floats provided (defaults OFF to avoid changing output shape silently)
+    # Emit BPS fields even if only floats provided (defaults OFF)
     [switch]$EmitBps,
 
     [string]$actor = "VE",
@@ -37,61 +36,42 @@ $ErrorActionPreference = "Stop"
 function Convert-ToStableJson {
     param([Parameter(Mandatory=$true)] $Obj)
 
-    # Prefer System.Text.Json when available (PowerShell 7+)
+    # Require System.Text.Json (pwsh / PS7+)
     $stj = [type]::GetType("System.Text.Json.JsonSerializer, System.Text.Json", $false)
-    if ($stj) {
-        $opt = [System.Text.Json.JsonSerializerOptions]::new()
-        $opt.WriteIndented = $false
-        $opt.Encoder = [System.Text.Encodings.Web.JavaScriptEncoder]::UnsafeRelaxedJsonEscaping
-        return [System.Text.Json.JsonSerializer]::Serialize($Obj, $opt)
+    if (-not $stj) {
+        throw "System.Text.Json not available. Run with pwsh (PowerShell 7+)."
     }
 
-    # Optional fallback: Newtonsoft.Json (PowerShell 5.1)
-    try {
-        Add-Type -AssemblyName "Newtonsoft.Json" -ErrorAction Stop | Out-Null
-        $settings = New-Object Newtonsoft.Json.JsonSerializerSettings
-        $settings.Formatting = [Newtonsoft.Json.Formatting]::None
-        $settings.StringEscapeHandling = [Newtonsoft.Json.StringEscapeHandling]::Default
-        return [Newtonsoft.Json.JsonConvert]::SerializeObject($Obj, $settings)
-    } catch {
-        throw "No stable JSON serializer available. Run with PowerShell 7+ (pwsh), or provide Newtonsoft.Json for PS5.1. Details: $($_.Exception.Message)"
-    }
+    $opt = [System.Text.Json.JsonSerializerOptions]::new()
+    $opt.WriteIndented = $false
+    $opt.Encoder = [System.Text.Encodings.Web.JavaScriptEncoder]::UnsafeRelaxedJsonEscaping
+    return [System.Text.Json.JsonSerializer]::Serialize($Obj, $opt)
 }
 
 function Get-Sha256Utf8 {
     param([Parameter(Mandatory=$true)][string]$Text)
-
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
         $hashBytes = $sha.ComputeHash($bytes)
         return -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
     }
-    finally {
-        $sha.Dispose()
-    }
+    finally { $sha.Dispose() }
 }
 
-function Clamp-01 {
-    param([double]$x)
+function Clamp-01([double]$x) {
     if ($x -lt 0.0) { return 0.0 }
     if ($x -gt 1.0) { return 1.0 }
     return $x
 }
-
-function Round2 {
-    param([double]$x)
+function Round2([double]$x) {
     return [math]::Round($x, 2, [MidpointRounding]::AwayFromZero)
 }
-
-function To-Bps {
-    param([double]$x)
+function To-Bps([double]$x) {
     $c = Clamp-01 $x
     return [int][math]::Round($c * 10000.0, 0, [MidpointRounding]::AwayFromZero)
 }
-
-function From-Bps {
-    param([int]$bps)
+function From-Bps([int]$bps) {
     return ([double]$bps) / 10000.0
 }
 
@@ -120,7 +100,8 @@ try {
         $jsonNoHash = Convert-ToStableJson $gen
         $gen["hash_self"] = Get-Sha256Utf8 $jsonNoHash
 
-        Add-JsonLineAtomically -Path $LedgerPath -Object $gen
+        $jsonLine = Convert-ToStableJson $gen
+        Add-JsonLineAtomicallyText -Path $LedgerPath -Text $jsonLine
     }
 
     $prev = Read-LastJsonLine -Path $LedgerPath
@@ -129,21 +110,19 @@ try {
     $prevHash = $prev.hash_self
     if (-not $prevHash) { $prevHash = ("0" * 64) }
 
-    # Decide whether bps are the source of truth (only if ALL provided)
-    $haveBps = ($rho_bps.HasValue -and $gamma_bps.HasValue -and $delta_bps.HasValue)
+    # NOTE: Nullable params may arrive as $null/int; avoid .HasValue
+    $haveBps = (($null -ne $rho_bps) -and ($null -ne $gamma_bps) -and ($null -ne $delta_bps))
 
     if ($haveBps) {
-        $rho   = From-Bps $rho_bps.Value
-        $gamma = From-Bps $gamma_bps.Value
-        $delta = From-Bps $delta_bps.Value
+        $rho   = From-Bps ([int]$rho_bps)
+        $gamma = From-Bps ([int]$gamma_bps)
+        $delta = From-Bps ([int]$delta_bps)
     } else {
-        # Compute bps deterministically from floats, but only emit if EmitBps is set
-        $rho_bps   = [Nullable[int]](To-Bps $rho)
-        $gamma_bps = [Nullable[int]](To-Bps $gamma)
-        $delta_bps = [Nullable[int]](To-Bps $delta)
+        $rho_bps   = To-Bps $rho
+        $gamma_bps = To-Bps $gamma
+        $delta_bps = To-Bps $delta
     }
 
-    # Canonicalize floats to 2 decimals (legacy intent)
     $rho2   = Round2 (Clamp-01 $rho)
     $gamma2 = Round2 (Clamp-01 $gamma)
     $delta2 = Round2 (Clamp-01 $delta)
@@ -160,15 +139,17 @@ try {
     }
 
     if ($haveBps -or $EmitBps.IsPresent) {
-        $entry["rho_bps"]   = $rho_bps.Value
-        $entry["gamma_bps"] = $gamma_bps.Value
-        $entry["delta_bps"] = $delta_bps.Value
+        $entry["rho_bps"]   = [int]$rho_bps
+        $entry["gamma_bps"] = [int]$gamma_bps
+        $entry["delta_bps"] = [int]$delta_bps
     }
 
     $jsonNoHash = Convert-ToStableJson $entry
     $entry["hash_self"] = Get-Sha256Utf8 $jsonNoHash
 
-    Add-JsonLineAtomically -Path $LedgerPath -Object $entry
+    $jsonLine = Convert-ToStableJson $entry
+    Add-JsonLineAtomicallyText -Path $LedgerPath -Text $jsonLine
+
     Write-Host "Appended entry. hash_prev=$prevHash hash_self=$($entry.hash_self)"
 }
 finally {
