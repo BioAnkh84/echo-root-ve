@@ -36,3 +36,13 @@ ve_ledger.jsonl.bak*
 *.broken_backup
 *.tmp
 _tmp_ledger.jsonl
+# Runtime ledgers (never commit)
+ve_ledger.jsonl
+ledger.jsonl
+*_ledger*.jsonl
+
+# Legacy ledger dumps (never commit)
+legacy/*.jsonl
+
+# One-off repair utilities (keep local only)
+tools_repair_ledger.py
