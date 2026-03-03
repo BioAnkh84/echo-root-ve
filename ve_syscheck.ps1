@@ -1,3 +1,10 @@
+﻿param([switch]$WriteLedger)
+
+# UTF-8 output for clean unicode symbols
+$OutputEncoding = [System.Text.UTF8Encoding]::new()
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+
+
 # ve_syscheck.ps1
 # One-button: handshake → gatecheck → ledger append → sysinfo → quickcheck
 
@@ -12,6 +19,10 @@ function Resolve-Python {
 
 function Run($cmd, $args) {
     Write-Host "→ $cmd $($args -join ' ')"
+    # --- PATCH: prevent interactive Python ---
+    if (($cmd -match "(?i)python(\.exe)?$") -and ($args.Count -eq 0)) {
+        $args = @("-c", "import sys; print(sys.executable); print(sys.version)")
+    }
     & $cmd @args 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "Command exited with code $LASTEXITCODE"
@@ -34,7 +45,9 @@ Run $pyExe @(".\ve_gatecheck.py")
 
 # 3) Ledger append (pre-sysinfo)
 Write-Host "`n[3/5] Ledger append (pre-sysinfo)"
+if ($WriteLedger) {
 .\ve_ledger_append.ps1 -rho 0.90 -gamma 0.80 -delta 0.25
+} else { Write-Host "Skipping ledger append (run with -WriteLedger to enable)." -ForegroundColor Yellow }
 
 # 4) Sysinfo snapshot
 Write-Host "`n[4/5] System info snapshot"
@@ -42,6 +55,12 @@ Write-Host "`n[4/5] System info snapshot"
 
 # 5) Quickcheck
 Write-Host "`n[5/5] Quickcheck"
-Run $pyExe @(".\ve_quickcheck_stub.py", "--ledger", "ledger.jsonl", "--psi-min", "1.38")
+Run $pyExe @(".\ve_quickcheck.py", "--ledger", "ledger.jsonl", "--psi-min", "1.38")
 
 Write-Host "`n✅ ve_syscheck complete."
+
+
+
+
+
+

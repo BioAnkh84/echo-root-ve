@@ -35,3 +35,17 @@ policies/
 ve_ledger.jsonl.bak*
 *.broken_backup
 *.tmp
+
+# Local virtual env
+.venv/
+
+# Runtime artifacts
+ledger.jsonl
+sysinfo.json
+ve_ledger.jsonl
+
+# Quickcheck logs folder (already present, but keep explicit)
+QUICKCHECK_LOGS/
+# Quickcheck logs (file or directory)
+QUICKCHECK_LOGS
+QUICKCHECK_LOGS/
