@@ -1,45 +1,58 @@
 ﻿param(
-    [switch]$WriteLedger,
+    [string]$RepoPath = "E:\Echo_Nexus_Data\repos\echo-root-ve",
+    [string]$PythonPath = "",
     [string]$LedgerPath = "E:\Echo_Nexus_Data\ve_ledger.jsonl",
-    [string]$PythonPath = ""
+    [string]$BridgePath = "E:\Echo_Nexus_Data\habitat\cipher_local\echo_gate_bridge.py",
+    [switch]$VerboseChecks
 )
 
-# Force non-terminating errors to stop so exit codes are truthful
+# ================================================================
+# Echo Root VE System Check
+# Reentry → bridge → governed kernel → ledger → quickcheck
+# ================================================================
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# UTF-8 output for clean unicode symbols
-$OutputEncoding = [System.Text.UTF8Encoding]::new()
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+# ------------------------------------------------
+# UTF-8 hygiene
+# ------------------------------------------------
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = $utf8
+$OutputEncoding = $utf8
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+$env:PYTHONUTF8 = "1"
 
-# ve_syscheck.ps1
-# One-button: handshake → gatecheck → ledger append → sysinfo → quickcheck
+# ------------------------------------------------
+# Helpers
+# ------------------------------------------------
+function Write-Step {
+    param([string]$Text)
+    Write-Host ""
+    Write-Host $Text -ForegroundColor Cyan
+}
 
-# --- Helpers ---
 function Resolve-Python {
     param(
         [string]$PreferredPython,
         [string]$RepoRoot
     )
 
-    # 0) Explicit override
     if ($PreferredPython -and $PreferredPython.Trim() -ne "") {
         if (Test-Path -LiteralPath $PreferredPython) { return $PreferredPython }
         throw "PythonPath was provided but not found: $PreferredPython"
     }
 
-    # 1) Active venv
     if ($env:VIRTUAL_ENV) {
         $candidate = Join-Path $env:VIRTUAL_ENV "Scripts\python.exe"
         if (Test-Path -LiteralPath $candidate) { return $candidate }
     }
 
-    # 2) Repo-local .venv
     if ($RepoRoot) {
         $candidate = Join-Path $RepoRoot ".venv\Scripts\python.exe"
         if (Test-Path -LiteralPath $candidate) { return $candidate }
     }
 
-    # 3) PATH resolution
     $python = Get-Command python -ErrorAction SilentlyContinue
     if ($python) { return $python.Source }
 
@@ -49,183 +62,189 @@ function Resolve-Python {
     throw "No Python interpreter found. Install Python 3 or activate a venv."
 }
 
-function Run {
+function Invoke-CheckedCommand {
     param(
-        [Parameter(Mandatory=$true)][string]$Cmd,
-        [Parameter(Mandatory=$false)][string[]]$ArgList = @()
+        [Parameter(Mandatory=$true)][string]$Exe,
+        [Parameter(Mandatory=$false)][string[]]$Args = @(),
+        [Parameter(Mandatory=$true)][string]$Label,
+        [switch]$AllowSoftFail,
+        [int[]]$SoftFailCodes = @(20)
     )
 
-    Write-Host "→ $Cmd $($ArgList -join ' ')"
-
-    # Prevent accidental interactive Python
-    if (($Cmd -match "(?i)python(\.exe)?$") -and ($ArgList.Count -eq 0)) {
-        $ArgList = @("-c", "import sys; print(sys.executable); print(sys.version)")
+    if ($VerboseChecks) {
+        Write-Host "→ $Exe $($Args -join ' ')" -ForegroundColor DarkGray
+    } else {
+        Write-Host "→ $Label"
     }
 
-    & $Cmd @ArgList 2>&1
+    & $Exe @Args
+    $rc = $LASTEXITCODE
 
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Command exited with code $LASTEXITCODE"
+    if ($rc -eq 0) {
+        Write-Host "[OK] $Label" -ForegroundColor Green
+        return 0
     }
-}
 
-function Write-Utf8NoBom {
-    param(
-        [Parameter(Mandatory=$true)][string]$Path,
-        [Parameter(Mandatory=$true)][string]$Text
-    )
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($Path, $Text, $utf8NoBom)
-}
-
-function Get-LedgerHasAnyRecord {
-    param([string]$Path)
-
-    if (-not (Test-Path -LiteralPath $Path)) { return $false }
-    $fi = Get-Item -LiteralPath $Path -ErrorAction SilentlyContinue
-    if (-not $fi) { return $false }
-    if ($fi.Length -le 0) { return $false }
-
-    # If the file has only whitespace/newlines, treat as empty
-    try {
-        $firstNonEmpty = Get-Content -LiteralPath $Path -TotalCount 200 | Where-Object { $_.Trim() -ne "" } | Select-Object -First 1
-        return [bool]$firstNonEmpty
-    } catch {
-        return $false
+    if ($AllowSoftFail -and ($SoftFailCodes -contains $rc)) {
+        Write-Host "[SOFT-FAIL] $Label (exit $rc)" -ForegroundColor Yellow
+        return $rc
     }
+
+    Write-Host "[FAIL] $Label (exit $rc)" -ForegroundColor Red
+    throw "$Label failed with exit code $rc"
 }
 
-function Ensure-LedgerFile {
-    param([string]$Path)
-    if (-not (Test-Path -LiteralPath $Path)) {
-        New-Item -ItemType File -Path $Path -Force | Out-Null
-    }
-}
-
-function Write-GenesisFallback {
+function Ensure-File {
     param(
         [string]$Path,
-        [double]$rho,
-        [double]$gamma,
-        [double]$delta
+        [string]$Label
     )
-    # Fallback: write a minimal genesis record to avoid append scripts failing on empty ledger.
-    # Uses hash_prev all-zeros and hash_self as a dummy placeholder.
-    # NOTE: This is a syscheck safety net only; your real canonical writer should own genesis format.
-    $gen = [ordered]@{
-        time      = (Get-Date).ToString("s")
-        rho       = $rho
-        gamma     = $gamma
-        delta     = $delta
-        hash_prev = ("0" * 64)
-        hash_self = ("0" * 64)
-        note      = "syscheck_genesis_fallback"
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "$Label not found: $Path"
     }
-    $line = ($gen | ConvertTo-Json -Compress)
-    Add-Content -LiteralPath $Path -Value $line -Encoding utf8
-    Write-Host "Genesis fallback line written to ledger (syscheck safety net)." -ForegroundColor Yellow
+
+    Write-Host "[OK] $Label found" -ForegroundColor Green
 }
 
-# --- Paths ---
-$here = $PSScriptRoot
-Set-Location $here
+function Get-LedgerLineCount {
+    param([string]$Path)
 
-$pyExe = Resolve-Python -PreferredPython $PythonPath -RepoRoot $here
+    if (-not (Test-Path -LiteralPath $Path)) { return 0 }
 
-Write-Host "[VE/syscheck] Using python: $pyExe"
-Write-Host "[VE/syscheck] LedgerPath: $LedgerPath"
-
-# 1) Handshake (quote-safe via temp file)
-Write-Host "`n[1/5] Handshake"
-$handshakeObj = @{
-    id    = "syscheck"
-    rho   = 0.83
-    gamma = 0.78
-    delta = 0.22
-}
-$handshakeJson = ($handshakeObj | ConvertTo-Json -Compress)
-$tmpHandshake = Join-Path $env:TEMP "ve_syscheck_handshake.json"
-Write-Utf8NoBom -Path $tmpHandshake -Text $handshakeJson
-
-Run -Cmd $pyExe -ArgList @(
-    ".\ve_handshake.py",
-    "--input-file", $tmpHandshake
-)
-
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "`n⚠️ Handshake failed; stopping syscheck." -ForegroundColor Yellow
-    exit 10
-}
-
-# 2) Gatecheck
-Write-Host "`n[2/5] Gatecheck"
-Run -Cmd $pyExe -ArgList @(".\ve_gatecheck.py")
-if ($LASTEXITCODE -ne 0) { exit 30 }
-
-# 3) Ledger append (optional)
-Write-Host "`n[3/5] Ledger append (pre-sysinfo)"
-if ($WriteLedger) {
-    Ensure-LedgerFile -Path $LedgerPath
-
-    $hasAny = Get-LedgerHasAnyRecord -Path $LedgerPath
-
-    # We do NOT introspect cmd.Parameters (it can be null / weird). We just call with -LedgerPath always.
-    # If the append script supports -Genesis, great; if not, we fallback by writing a genesis line once.
     try {
-        if (-not $hasAny) {
-            # Attempt: append script with -Genesis (if it supports it)
-            & .\ve_ledger_append.ps1 -rho 0.90 -gamma 0.80 -delta 0.25 -LedgerPath $LedgerPath -Genesis 2>$null
-            if ($LASTEXITCODE -ne 0) {
-                # If -Genesis isn't supported, fallback genesis then try normal append
-                Write-GenesisFallback -Path $LedgerPath -rho 0.90 -gamma 0.80 -delta 0.25
-                & .\ve_ledger_append.ps1 -rho 0.90 -gamma 0.80 -delta 0.25 -LedgerPath $LedgerPath
-            }
-        } else {
-            & .\ve_ledger_append.ps1 -rho 0.90 -gamma 0.80 -delta 0.25 -LedgerPath $LedgerPath
-        }
+        return (Get-Content -LiteralPath $Path | Measure-Object -Line).Lines
+    } catch {
+        return 0
     }
-    catch {
-        Write-Host "❌ Ledger append step failed: $($_.Exception.Message)" -ForegroundColor Red
-        exit 30
-    }
-
-} else {
-    Write-Host "Skipping ledger append (run with -WriteLedger to enable)." -ForegroundColor Yellow
 }
 
-# 4) Sysinfo snapshot
-Write-Host "`n[4/5] System info snapshot"
-.\ve_sysinfo.ps1 -OutPath "sysinfo.json"
+# ------------------------------------------------
+# Resolve environment
+# ------------------------------------------------
+Write-Host ""
+Write-Host "=== Echo Root VE System Check ===" -ForegroundColor Cyan
+Write-Host ""
 
-# 5) Quickcheck
-Write-Host "`n[5/5] Quickcheck"
-if (-not (Test-Path -LiteralPath $LedgerPath)) {
-    Write-Host "[VE/syscheck] Ledger not found: $LedgerPath" -ForegroundColor Yellow
-    exit 10
+Ensure-File -Path $RepoPath -Label "Repo path"
+Set-Location $RepoPath
+
+$python = Resolve-Python -PreferredPython $PythonPath -RepoRoot $RepoPath
+Write-Host "[OK] Python: $python" -ForegroundColor Green
+
+Ensure-File -Path $BridgePath -Label "Echo Gate Bridge"
+Ensure-File -Path (Join-Path $RepoPath "ve_kernel.py") -Label "VE Python kernel"
+Ensure-File -Path (Join-Path $RepoPath "ve_quickcheck.py") -Label "VE quickcheck"
+Ensure-File -Path (Join-Path $RepoPath "ve_reentry.ps1") -Label "VE reentry script"
+
+# ------------------------------------------------
+# 1. Reentry
+# ------------------------------------------------
+Write-Step "[1/6] Reentry"
+& (Join-Path $RepoPath "ve_reentry.ps1")
+if ($LASTEXITCODE -ne 0) {
+    throw "Reentry check failed with exit code $LASTEXITCODE"
 }
+Write-Host "[OK] Reentry check passed" -ForegroundColor Green
 
-Run -Cmd $pyExe -ArgList @(
-    ".\ve_quickcheck.py",
-    "--ledger", $LedgerPath,
-    "--psi-min", "1.38",
-    "--psi-warn-is-softfail"
+# ------------------------------------------------
+# 2. Bridge smoke tests
+# ------------------------------------------------
+Write-Step "[2/6] Echo Gate Bridge smoke tests"
+
+$bridgeCases = @(
+    @{ Input = "hello";             ExpectDecision = "PROCEED"; ExpectRoute = "normal" },
+    @{ Input = "handle it";         ExpectDecision = "PAUSE";   ExpectRoute = "safe_only" },
+    @{ Input = "delete everything"; ExpectDecision = "ABORT";   ExpectRoute = "blocked" }
 )
 
-$rc = $LASTEXITCODE
+foreach ($case in $bridgeCases) {
+    $raw = & $python $BridgePath $case.Input
+    if ($LASTEXITCODE -ne 0) {
+        throw "Bridge call failed for input: $($case.Input)"
+    }
 
-if ($rc -eq 0) {
-    Write-Host "`n✅ ve_syscheck complete."
-    exit 0
+    $obj = $raw | ConvertFrom-Json
+
+    if ($obj.decision -ne $case.ExpectDecision) {
+        throw "Bridge decision mismatch for '$($case.Input)': got '$($obj.decision)', expected '$($case.ExpectDecision)'"
+    }
+
+    if ($obj.route_hint -ne $case.ExpectRoute) {
+        throw "Bridge route_hint mismatch for '$($case.Input)': got '$($obj.route_hint)', expected '$($case.ExpectRoute)'"
+    }
+
+    Write-Host "[OK] Bridge case '$($case.Input)' → $($obj.decision) / $($obj.route_hint)" -ForegroundColor Green
 }
-elseif ($rc -eq 20) {
-    Write-Host "`n⚠️ ve_syscheck complete (soft-fail)."
-    exit 20
+
+# ------------------------------------------------
+# 3. VE kernel smoke tests
+# ------------------------------------------------
+Write-Step "[3/6] VE kernel governed execution tests"
+
+$beforeLines = Get-LedgerLineCount -Path $LedgerPath
+
+$kernelCases = @(
+    @{ Args = @("ve_kernel.py", "exec", "echo: hello");             ExpectText = "decision=PROCEED"; ExpectExit = 0 },
+    @{ Args = @("ve_kernel.py", "exec", "handle it");               ExpectText = "decision=PAUSE";   ExpectExit = 0 },
+    @{ Args = @("ve_kernel.py", "exec", "delete everything");       ExpectText = "decision=ABORT";   ExpectExit = 1 }
+)
+
+foreach ($case in $kernelCases) {
+    $output = & $python @($case.Args) 2>&1
+    $rc = $LASTEXITCODE
+    $joined = ($output | Out-String)
+
+    if ($rc -ne $case.ExpectExit) {
+        throw "Kernel exit mismatch for '$($case.Args -join ' ')': got '$rc', expected '$($case.ExpectExit)'"
+    }
+
+    if ($joined -notmatch [regex]::Escape($case.ExpectText)) {
+        throw "Kernel output missing expected text '$($case.ExpectText)' for '$($case.Args -join ' ')'"
+    }
+
+    Write-Host "[OK] Kernel case '$($case.Args[-1])' validated" -ForegroundColor Green
 }
-elseif ($rc -eq 10) {
-    Write-Host "`n⚠️ ve_syscheck complete (env issue)."
-    exit 10
+
+$afterLines = Get-LedgerLineCount -Path $LedgerPath
+if ($afterLines -lt $beforeLines) {
+    throw "Ledger line count decreased unexpectedly"
 }
-else {
-    Write-Host "`n❌ ve_syscheck complete (hard-fail)."
-    exit 30
+
+if ($afterLines -eq 0) {
+    Write-Host "[WARN] Ledger file exists but has no entries yet" -ForegroundColor Yellow
+} else {
+    Write-Host "[OK] Ledger present with $afterLines line(s)" -ForegroundColor Green
 }
+
+# ------------------------------------------------
+# 4. Kernel built-in quickcheck
+# ------------------------------------------------
+Write-Step "[4/6] VE kernel quickcheck"
+Invoke-CheckedCommand -Exe $python -Args @("ve_kernel.py", "quickcheck") -Label "ve_kernel quickcheck"
+
+# ------------------------------------------------
+# 5. Ledger quickcheck
+# ------------------------------------------------
+Write-Step "[5/6] Ledger quickcheck"
+Invoke-CheckedCommand `
+    -Exe $python `
+    -Args @("ve_quickcheck.py", "--ledger", $LedgerPath, "--psi-min", "1.38", "--psi-warn-is-softfail") `
+    -Label "ve_quickcheck" `
+    -AllowSoftFail
+
+# ------------------------------------------------
+# 6. Summary
+# ------------------------------------------------
+Write-Step "[6/6] Summary"
+Write-Host "[OK] Repo path: $RepoPath" -ForegroundColor Green
+Write-Host "[OK] Bridge path: $BridgePath" -ForegroundColor Green
+Write-Host "[OK] Ledger path: $LedgerPath" -ForegroundColor Green
+Write-Host "[OK] Governance wiring validated" -ForegroundColor Green
+Write-Host "[OK] VE kernel validated" -ForegroundColor Green
+Write-Host "[OK] Quickcheck completed" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "=== VE System Check Complete ===" -ForegroundColor Cyan
+Write-Host ""
+exit 0
