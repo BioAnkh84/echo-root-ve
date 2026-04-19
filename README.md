@@ -11,13 +11,75 @@ It ensures every execution is:
 
 ---
 
+## 💡 Why This Matters
+
+Most AI systems decide behavior internally.
+
+Echo Root enforces:
+
+→ decisions **before execution**  
+→ deterministic control  
+→ auditable outcomes  
+
+This enables safe, controlled AI deployment.
+
+---
+
 ## 🚀 Quickstart
-bash git clone https://github.com/BioAnkh84/echo-root-ve.git cd .\echo-root-ve\VE_Test_Suite_v0.1a powershell -ExecutionPolicy Bypass -File .\ve_prepush_check.ps1
-`
+
+```bash
+git clone https://github.com/BioAnkh84/echo-root-ve.git
+cd echo-root-ve/VE_Test_Suite_v0.1a
+powershell -ExecutionPolicy Bypass -File .\ve_prepush_check.ps1
+````
 
 If you see:
+
+```text
 [AUDIT] OK
+```
+
 → The environment, kernel, and ledger integrity are verified.
+
+---
+
+## ⚡ 30-Second Demo
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/api/chat" `
+-Method POST `
+-ContentType "application/json" `
+-Body '{"text":"handle it"}'
+```
+
+**Output:**
+
+```json
+{
+  "decision": "PAUSE",
+  "route_hint": "safe_only",
+  "reply": "Acknowledged..."
+}
+```
+
+---
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:5000/api/chat" `
+-Method POST `
+-ContentType "application/json" `
+-Body '{"text":"delete everything"}'
+```
+
+**Output:**
+
+```json
+{
+  "decision": "ABORT",
+  "route_hint": "blocked",
+  "reply": "Request blocked by governance layer"
+}
+```
 
 ---
 
@@ -30,7 +92,25 @@ VE acts as the **execution + validation layer** underneath it.
 ---
 
 ## 🔁 System Pipeline
-Input → Echo Gate (ρ, γ, Δ scoring) → Redivous (decision enforcement) → Bridge (route_hint contract) → Execution (VE / Cipher) → Ledger (trace + audit)
+
+```
+Input
+  → Echo Gate (ρ, γ, Δ scoring)
+  → Redivous (decision enforcement)
+  → Bridge (route_hint contract)
+  → Execution (VE / Cipher)
+  → Ledger (trace + audit)
+```
+
+---
+
+## 📐 Thresholds
+
+* ρ ≥ 0.70 → sufficient confidence
+* γ ≥ 0.70 → aligned intent
+* Δ ≤ 0.30 → safe execution
+* Δ > 0.40 → ABORT
+
 ---
 
 ## ⚖️ Decision Model
@@ -44,7 +124,15 @@ Input → Echo Gate (ρ, γ, Δ scoring) → Redivous (decision enforcement) →
 ---
 
 ## 🔀 route_hint
-json { "normal": "full execution", "safe_only": "restricted SAFE MODE", "blocked": "no execution" }
+
+```json
+{
+  "normal": "full execution",
+  "safe_only": "restricted SAFE MODE",
+  "blocked": "no execution"
+}
+```
+
 ---
 
 ## 🧪 Example Behavior
@@ -54,6 +142,21 @@ json { "normal": "full execution", "safe_only": "restricted SAFE MODE", "blocked
 | "hello"             | PROCEED  | Normal response    |
 | "handle it"         | PAUSE    | SAFE MODE response |
 | "delete everything" | ABORT    | Execution blocked  |
+
+---
+
+## 📄 Example Ledger Entry
+
+```json
+{
+  "trace_id": "ae310b3d-...",
+  "decision": "PAUSE",
+  "route_hint": "safe_only",
+  "rho": 0.6,
+  "gamma": 0.65,
+  "delta": 0.25
+}
+```
 
 ---
 
@@ -150,7 +253,12 @@ Echo Root enables:
 ## 🧭 Philosophy
 
 Echo Root separates **decision authority** from execution:
-AI does not decide what it can do. It is governed by a deterministic control layer.
+
+```
+AI does not decide what it can do.
+It is governed by a deterministic control layer.
+```
+
 This enables:
 
 * safer AI deployment
