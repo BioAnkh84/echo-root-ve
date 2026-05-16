@@ -49,3 +49,6 @@ QUICKCHECK_LOGS/
 # Quickcheck logs (file or directory)
 QUICKCHECK_LOGS
 QUICKCHECK_LOGS/
+
+# Additional runtime files
+*.lock

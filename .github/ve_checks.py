@@ -26,7 +26,7 @@ from pathlib import Path
 
 
 REQUIRED_FILES = [
-    "ve_quickcheck_stub.py",
+    "ve_quickcheck.py",
     "ve_kernel.ps1",
     "ve_kernel.py",
     "ve_kernel.sh",
@@ -44,7 +44,9 @@ RUNTIME_SHOULD_NOT_BE_TRACKED = [
 
 
 def run(cmd: list[str], cwd: Path) -> int:
-    p = subprocess.run(cmd, cwd=str(cwd), text=True)
+    p = subprocess.run(cmd, cwd=str(cwd), text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if p.returncode != 0 and p.stdout:
+        print(p.stdout.strip())
     return p.returncode
 
 
@@ -59,17 +61,17 @@ def main() -> int:
     print("[OK] Required files present.")
 
     # 2) quickcheck CLI runnable
-    rc = run([sys.executable, str(repo / "ve_quickcheck_stub.py"), "--help"], cwd=repo)
+    rc = run([sys.executable, str(repo / "ve_quickcheck.py"), "--help"], cwd=repo)
     if rc != 0:
-        print("[FAIL] ve_quickcheck_stub.py --help failed with rc=", rc)
+        print("[FAIL] ve_quickcheck.py --help failed with rc=", rc)
         return 20
-    print("[OK] ve_quickcheck_stub.py runnable.")
+    print("[OK] ve_quickcheck.py runnable.")
 
     # 3) Git sanity: runtime artifacts not tracked
     # If git isn't available (rare on GH runners), skip this check gracefully.
     try:
         tracked = subprocess.check_output(
-            ["git", "ls-files"], cwd=str(repo), text=True
+            ["git", "ls-files"], cwd=str(repo), text=True, stderr=subprocess.DEVNULL
         ).splitlines()
         tracked_set = set(tracked)
         bad = [f for f in RUNTIME_SHOULD_NOT_BE_TRACKED if f in tracked_set]
@@ -84,19 +86,5 @@ def main() -> int:
     return 0
 
 
-# --- PATCH: tracked-only runtime artifact check (PS/CI hardened) ---
-import subprocess
-
-def _tracked(paths):
-    out = subprocess.check_output(["git","ls-files","-z","--"] + list(paths))
-    items = [p for p in out.decode("utf-8", errors="replace").split("\x00") if p]
-    return set(items)
-
-tracked = _tracked(["ve_ledger.jsonl","ledger.jsonl"])
-if tracked:
-    print("[FAIL] Runtime artifacts are tracked (should be ignored): " + ", ".join(sorted(tracked)))
-    raise SystemExit(20)
-# --- END PATCH ---
 if __name__ == "__main__":
     raise SystemExit(main())
-

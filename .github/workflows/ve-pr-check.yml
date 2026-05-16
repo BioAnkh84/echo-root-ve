@@ -10,7 +10,5 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-      - name: VE PR verify stub
-        run: |
-          echo "VE PR verify stub running..."
-          echo "TODO: wire in extra checks (docs, schema, etc.)."
+      - name: Run VE PR checks
+        run: python .github/ve_checks.py
