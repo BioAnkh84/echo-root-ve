@@ -1,27 +1,51 @@
-# WHAT THIS IS
-## Vulpine Echo (VE) — Echo Root OS Execution Harness
+# What This Is
 
-**One sentence:** VE is the execution and audit layer that sits beneath Echo Root's governance.
+## Vulpine Echo (VE) - Echo Root OS Execution Harness
+
+**One sentence:** VE is the execution and audit layer that sits beneath Echo Root's governance concept.
 
 ---
 
-## The System
+## The Public Shape
 
-```
+```text
 Input
-  → Echo Gate (ρ/γ/Δ scoring)     — should I proceed?
-  → Redivous (decision)           — PROCEED / PAUSE / ABORT
-  → Bridge (route_hint contract)  — where does this go?
-  → VE Execution                  — do the work
-  → Ledger (JSONL, hash-chained)  — prove it happened
+  -> governance gate
+  -> enforcement decision
+  -> route contract
+  -> VE execution
+  -> ledger receipt
+  -> integrity check
 ```
 
-**Gate thresholds:**
-- ρ ≥ 0.70 — confidence
-- γ ≥ 0.70 — intent alignment
-- Δ ≤ 0.30 — drift tolerance
+The important separation is:
 
-**Key property:** The ledger is tamper-evident. Every run is traceable. You cannot quietly undo what happened.
+```text
+understanding != permission
+confidence != authority
+execution requires a receipt
+```
+
+VE is a public harness for testing that pattern. It is not the private Echo Nexus / Cipher habitat and does not contain private operator data.
+
+---
+
+## What VE Proves Publicly
+
+- a request can be routed before execution
+- execution can be recorded as a receipt
+- ledgers can be checked for integrity
+- demo runs can be repeated
+- uncertain or unsafe paths can be treated as review moments
+
+---
+
+## What VE Does Not Prove
+
+- it does not prove full AI safety
+- it does not make an AI autonomous by itself
+- it does not remove the need for human review
+- it does not expose internal habitat scoring or private memory
 
 ---
 
@@ -29,18 +53,19 @@ Input
 
 | File | Role |
 |------|------|
-| `ve_kernel.ps1` | Core entrypoint |
-| `ve_kernel.py` | Python bridge |
-| `ve_gatecheck.py` | Gate logic (ρ/γ/Δ) |
+| `ve_kernel.ps1` | PowerShell execution harness |
+| `ve_kernel.py` | Python execution bridge |
+| `ve_gatecheck.py` | Public gate check adapter |
 | `ve_schema_check.py` | Ledger chain validator |
 | `ve_quickcheck.py` | Integrity checker |
 | `ve_manifest_verify.py` | File manifest verification |
-| `ve_guard.ps1` | Write guard (ve_data/ only) |
+| `ve_guard.ps1` | Write guard |
 | `policy.ve.psl` | Policy spec |
-| `Modules/VE.Guard/` | PowerShell module |
+| `Modules/VE.Guard/` | PowerShell guard module |
 | `.ve_snapshots/` | Snapshot sequence |
 
 ---
 
 ## Contact
-GitHub: @BioAnkh84
+
+GitHub: [@BioAnkh84](https://github.com/BioAnkh84)

@@ -1,5 +1,13 @@
 # Changelog — Vulpine Echo (VE)
 
+## Public Profile Alignment — May 2026
+
+### Updated
+- Reworked `README.md` into a public-facing project overview matching the Team PURP lab standard.
+- Reworked `WHAT_THIS_IS.md` to describe the public execution harness shape without exposing private habitat details.
+- Clarified `KNOWN_GAPS.md` around validation limits and private habitat scope.
+- Expanded `SECURITY.md` with guidance against submitting private ledgers, memories, credentials, operator data, or unreleased internal details.
+
 ## Codex Post-Audit Cleanup — May 2026
 
 ### Fixed
