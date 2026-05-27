@@ -42,13 +42,19 @@ For production use with multiple operators, key rotation should be defined.
 
 ---
 
-## FORMAL PROOF
+## VALIDATION
 
-### GAP-06: ρ/γ/Δ thresholds are not formally verified
+### GAP-06: Public gate thresholds are not formally verified
 **Status:** OPEN
-The values (0.70 / 0.70 / 0.30) are chosen by design intuition.
-No formal proof that these thresholds are sufficient for the stated safety properties.
-This is acceptable for v0.1. Should be addressed before any safety-critical deployment.
+The public gate values are chosen by design intuition and test behavior.
+There is no formal proof that the public thresholds are sufficient for safety-critical deployment.
+This is acceptable for the current prototype, but the repo should continue to state this clearly.
+
+### GAP-06B: Private habitat details are intentionally out of scope
+**Status:** INFO
+Echo Nexus / Cipher habitat data, private memories, internal scoring details, credentials,
+operator records, and private ledgers are not part of this public repo.
+This keeps the repo useful as a public harness without turning it into an internal operating manual.
 
 ---
 
