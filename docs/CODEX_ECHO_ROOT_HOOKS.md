@@ -72,6 +72,25 @@ receipt, and closeout. It should show that permission requests become `PAUSE`,
 destructive command posture becomes `ABORT`, calibration reasons are attached,
 and lifecycle events become hash-chained receipts.
 
+## Live Activation Probe
+
+The self-test proves the hook bridge logic. A live activation probe checks
+whether Codex is actually running the repo-local hooks in the current session:
+
+```text
+py -3.11 .codex/hooks/codex_hook_live_probe.py
+```
+
+Note `receipt_count`, run one harmless Codex tool action in a fresh trusted
+session, then run:
+
+```text
+py -3.11 .codex/hooks/codex_hook_live_probe.py --before-count <count>
+```
+
+If `live_hook_append_detected` is `true`, the repo hooks are active. If not,
+review hook trust/activation before relying on lifecycle receipts.
+
 ## What The Hooks Do Not Do
 
 - They do not silently approve commands.

@@ -92,6 +92,7 @@ Input
 | [2026-06] | Score tuning should name difference makers explicitly: evidence makers raise rho, risk makers raise delta, and feedback makers update future calibration instead of being hand-waved. |
 | [2026-06] | AI-facing docs should be operational packets, not essays: tell the next model what to read, what to run, what changes rho/delta, and when to pause. |
 | [2026-06] | Hook payload handling should be shape-tolerant and privacy-aware: extract useful command/tool hints, store shape hashes, and avoid raw payload dumps. |
+| [2026-06] | Live hook activation needs its own probe: simulated hook logic can pass while the current Codex session has not loaded or trusted repo-local hooks. |
 
 ---
 

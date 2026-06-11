@@ -18,7 +18,13 @@ py -3.11 repo_map.py --depth 3 --json
 py -3.11 .codex/hooks/codex_echo_root_selftest.py
 ```
 
-4. Run the release check before claiming readiness:
+4. Check live hook activation after trusting repo hooks:
+
+```text
+py -3.11 .codex/hooks/codex_hook_live_probe.py
+```
+
+5. Run the release check before claiming readiness:
 
 ```text
 py -3.11 .github\ve_checks.py
