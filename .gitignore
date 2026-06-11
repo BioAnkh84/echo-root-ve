@@ -48,6 +48,8 @@ ledger.jsonl
 sysinfo.json
 ve_ledger.jsonl
 ve_data/
+_tmp_receipt_demo.jsonl
+_tmp_repo_map_snapshot.json
 receipts/*.jsonl
 receipts/repo_map_latest.json
 receipts/repo_map_*.json

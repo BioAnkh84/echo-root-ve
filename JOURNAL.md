@@ -70,6 +70,7 @@ Input
 | 3 | [2025-10] | Artifact test runs (now archived) |
 | 4 | [2026-05] | External audit. Structure fixed. WHAT_THIS_IS, KNOWN_GAPS, JOURNAL added. |
 | 5 | [2026-05] | Post-audit cleanup. PR check wired, status script repaired, ledger pin guarded, py eval constrained. |
+| 6 | [2026-06] | v0.1 license-readiness package added: receipt gate/replay, repo-map/delta receipts, release evidence, safety scan, and CI proof. |
 
 ---
 
@@ -83,6 +84,7 @@ Input
 | [2026-05] | .bak files archived, not deleted (history preserved in archive/) |
 | [2026-05] | Artifact folders archived, .gitignore updated |
 | [2026-05] | CI/runtime truth cleanup after audit findings |
+| [2026-06] | Release branches must stay linear when `main` requires linear history; resolve README conflicts by preserving both public positioning and release proof paths, then rebase instead of merging. |
 
 ---
 
