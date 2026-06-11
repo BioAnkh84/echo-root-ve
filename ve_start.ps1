@@ -47,8 +47,8 @@ $DevCipherCandidates = @(
   (Join-Path $CipherHabitat "cipher_local.py")
 )
 
-# HUD URL (adjust if your server uses a different route)
-$HudUrl = "http://127.0.0.1:$HudPort/hud"
+# HUD URL (dashboard_server.py serves the operator HUD under /ui/hud.html)
+$HudUrl = "http://127.0.0.1:$HudPort/ui/hud.html"
 
 # --- Ensure folders exist (PS-compatible) ---
 New-Item -ItemType Directory -Force -Path $LogRoot | Out-Null
@@ -175,11 +175,15 @@ $env:VE_PYTHON   = $VePython
 $env:VE_LEDGER   = $Ledger
 $env:VE_API_PORT = "$ApiPort"
 $env:VE_HUD_PORT = "$HudPort"
+$env:VE_PAIRING_CLARIFICATION = "allowed"
 
 Set-Location $VeRepo
 
 Write-Section "Echo Root VE Start"
 Info "Operator mode (user-run). SYSTEM boot uses E:\Echo_Nexus_Data\service\echo_boot.ps1"
+Info "Pairing posture: clarification is allowed before nuanced action, recording, or training export."
+Info "Protocol: $VeRepo\VE_PAIRING_CLARIFICATION_PROTOCOL.md"
+Info "Contacts: cadence-based status prompts are allowed only with human confirmation."
 
 if ($StopAll) {
   Write-Section "Stopping operator-session services"

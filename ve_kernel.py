@@ -315,7 +315,7 @@ def governed_exec(payload: str) -> int:
 
             rc = safe_mode_exec(payload, level)
 
-            print(f"[Δ] → SAFE_{level}")
+            print(f"[DELTA] -> SAFE_{level}")
 
             return rc
 
@@ -337,6 +337,20 @@ def main(argv: List[str]) -> int:
 
     if argv[1] == "exec":
         return governed_exec(" ".join(argv[2:]))
+
+    if argv[1] == "quickcheck":
+        checks = [
+            ("echo: hello", EXIT_OK),
+            ("handle it", EXIT_OK),
+            ("delete everything", EXIT_FAIL),
+        ]
+        for payload, expected in checks:
+            rc = governed_exec(payload)
+            if rc != expected:
+                print(f"[QUICKCHECK FAIL] {payload} rc={rc} expected={expected}")
+                return EXIT_FAIL
+        print("[QUICKCHECK OK]")
+        return EXIT_OK
 
     return EXIT_FAIL
 

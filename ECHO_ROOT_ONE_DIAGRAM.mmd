@@ -1,0 +1,23 @@
+flowchart TD
+    A["Human / Local AI Pairing"] --> B["Pairing Recorder"]
+    B --> C{"Clarification Required?"}
+    C -- "Yes" --> D["Human / Operator / Contact Resolution"]
+    C -- "No" --> E["Gate Context Builder"]
+    D --> E
+    E --> F{"VE Gate Decision"}
+    F -- "PROCEED" --> G["Bounded Action"]
+    F -- "PROPOSE / PAUSE" --> H["Safe Review Posture"]
+    F -- "ABORT" --> I["Fail Closed"]
+    G --> J["Signed Audit Chain"]
+    H --> J
+    I --> J
+    J --> K["Deviation Classifier"]
+    J --> L["Twin Delta at Decision Time"]
+    K --> M["Unified Evidence Envelope"]
+    L --> M
+    M --> N["Replay / Verify"]
+    N --> O["Replay Report"]
+    N --> P["Classifier Drift Check"]
+    O --> Q["Doctrine + Lessons Learned"]
+    P --> Q
+    Q --> R["Reviewer Can Reconstruct What Happened"]

@@ -82,3 +82,12 @@ that will fail on any machine where the project lives elsewhere.
 This destroys existing audit history.
 Only use this to initialize a fresh ledger, never on an existing one.
 → Add a guard: fail if ledger already exists and is non-empty.
+
+### GAP-10: VSA baseline deviation validation is not built
+**Status:** OPEN
+The VSA doctrine has been reframed as baseline deviation detection, not stress detection,
+emotion detection, diagnosis, truth detection, or voice lie detection.
+The repo does not yet include validated personal-baseline datasets, environment-ladder
+recordings, signal degradation curves, or repeatability metrics.
+Before collecting larger VSA datasets, use `VE_VSA_BASELINE_DEVIATION_DOCTRINE.md`
+for consent, metadata, environment staging, and claim boundaries.
