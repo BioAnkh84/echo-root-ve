@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/echo-root-ve/schemas/echo_root_receipt.schema.json",
+  "title": "Echo Root VE Receipt",
+  "type": "object",
+  "required": [
+    "receipt_id",
+    "timestamp",
+    "actor_id",
+    "agent_id",
+    "model_id",
+    "provider_id",
+    "route_id",
+    "action_lane",
+    "requested_action",
+    "consent_scope_present",
+    "rho",
+    "delta",
+    "decision",
+    "reason",
+    "files_touched",
+    "tool_name",
+    "input_hash",
+    "output_hash",
+    "hash_prev",
+    "hash_self",
+    "replayable",
+    "fallback_status"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "minLength": 1 },
+    "actor_id": { "type": "string" },
+    "agent_id": { "type": "string" },
+    "model_id": { "type": "string" },
+    "provider_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "action_lane": { "type": "string" },
+    "requested_action": { "type": "string" },
+    "consent_scope_present": { "type": "boolean" },
+    "rho": { "type": "number", "minimum": 0, "maximum": 1 },
+    "delta": { "type": "number", "minimum": 0, "maximum": 1 },
+    "decision": {
+      "type": "string",
+      "enum": ["PROCEED", "PAUSE", "ABORT", "SAFE_MODE"]
+    },
+    "reason": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "files_touched": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tool_name": { "type": "string" },
+    "input_hash": { "type": "string" },
+    "output_hash": { "type": "string" },
+    "hash_prev": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "hash_self": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "replayable": { "type": "boolean" },
+    "fallback_status": { "type": "string" }
+  }
+}

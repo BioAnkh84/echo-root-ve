@@ -39,13 +39,27 @@ ve_ledger.jsonl.bak*
 # Local virtual env
 .venv/
 
+# Python cache
+__pycache__/
+*.py[cod]
+
 # Runtime artifacts
 ledger.jsonl
 sysinfo.json
 ve_ledger.jsonl
+ve_data/
+_tmp_receipt_demo.jsonl
+_tmp_repo_map_snapshot.json
+receipts/*.jsonl
+receipts/repo_map_latest.json
+receipts/repo_map_*.json
+!receipts/.gitkeep
 
 # Quickcheck logs folder (already present, but keep explicit)
 QUICKCHECK_LOGS/
 # Quickcheck logs (file or directory)
 QUICKCHECK_LOGS
 QUICKCHECK_LOGS/
+
+# Additional runtime files
+*.lock

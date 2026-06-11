@@ -226,7 +226,7 @@ Write-Host "System snapshot -> $OutPath"
 Ensure-File -path "ve_handshake.py" -content $py_handshake
 Ensure-File -path "ve_gatecheck.py" -content $py_gatecheck
 Ensure-File -path "ve_ledger_append.ps1" -content $ps_ledger_append
-Ensure-File -path "ve_quickcheck_stub.py" -content $py_quickcheck
+Ensure-File -path "ve_quickcheck.py" -content $py_quickcheck
 Ensure-File -path "ve_sysinfo.ps1" -content $ps_sysinfo
 
 # ---------- Detect Python ----------
@@ -259,7 +259,7 @@ $siOut | Tee-Object -FilePath $logPath -Append
 
 # ---------- 5) Quickcheck ----------
 Write-Section "5/5 Quickcheck"
-$qcOut = & "$pyExe" ".\ve_quickcheck_stub.py" "--ledger" "ledger.jsonl" "--psi-min" "1.38" 2>&1
+$qcOut = & "$pyExe" ".\ve_quickcheck.py" "--ledger" "ledger.jsonl" "--psi-min" "1.38" 2>&1
 $qcOut | Tee-Object -FilePath $logPath -Append
 if ($LASTEXITCODE -ne 0) {
     Write-Warning "Quickcheck returned $LASTEXITCODE (see log for details)"

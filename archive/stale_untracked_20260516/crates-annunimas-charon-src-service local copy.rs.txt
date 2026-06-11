@@ -1,0 +1,2664 @@
+// sigil: REPAIR
+use crate::types::{CharonRequestEnvelope, ProviderState, RouteDecision, RouteLoveEquationGuard};
+use annunimas_core::error::{AnnunimasError, Result};
+use annunimas_core::task::Task;
+use annunimas_governance::{record_bacon_lite, triad_validate};
+use annunimas_mnemosyne::{InformantEvent, MnemosyneService};
+use annunimas_plutus::{JouleWorkUnit, PlutusService};
+use chrono::Utc;
+use fs2::FileExt;
+use serde::Serialize;
+use serde_json::Value as JsonValue;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::Arc;
+use std::time::Instant;
+use std::time::{Duration as StdDuration, Instant as StdInstant};
+use tokio::sync::RwLock;
+
+use crate::bootstrap;
+use crate::route_policy;
+use crate::runtime_state;
+use crate::status;
+use bootstrap::{
+    default_bootstrap_state_path, default_provider_config_path, default_providers,
+    load_providers_from_config,
+};
+use route_policy::{
+    access_tier_class, apply_soft_lane_caps, build_route_decision, build_route_decision_with_triad,
+    decay_lane_fitness_snapshot, derive_route_execution_profile, excluded_provider_ids,
+    is_background_priority, is_high_priority, is_local_provider, is_primary_local_surface_provider,
+    merge_latency, near_day_quota, provider_eligible, provider_score, resolve_hybrid_route_policy,
+    select_model, HybridRoutePolicy, LaneFitnessSnapshot, RouteExecutionProfile,
+    RouteSelectionCandidate,
+};
+use runtime_state::{provider_unavailable_reason, refresh_provider_windows};
+pub use status::CharonStatus;
+use status::{build_budget_alerts, build_budget_pressure_summary, PackageRuntimeSignals};
+
+#[derive(Clone)]
+pub struct CharonService {
+    root: PathBuf,
+    state_path: PathBuf,
+    socket_path: PathBuf,
+    config_path: PathBuf,
+    bootstrap_state_path: PathBuf,
+    providers: Arc<RwLock<Vec<ProviderState>>>,
+    mnemosyne: Option<MnemosyneService>,
+}
+
+// ============================================================
+// 🧠 Echo Root — Pre-Execution Gate (Δ-based Routing Control)
+// Purpose:
+//   Evaluate input BEFORE execution and influence routing behavior.
+//   Outputs:
+//     - GateAction (Proceed / Pause / Abort)
+//     - Δ (drift / risk score)
+// ============================================================
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum GateAction {
+    Proceed,
+    Pause,
+    Abort,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct EchoGateDecision {
+    action: GateAction,
+    delta: f64,
+}
+
+fn evaluate_echo_gate(input: &str) -> EchoGateDecision {
+    let lowered = input.to_lowercase();
+
+    // 🔴 High-risk patterns → hard stop
+    if lowered.contains("modify system file") {
+        return EchoGateDecision {
+            action: GateAction::Abort,
+            delta: 0.7,
+        };
+    }
+
+    // 🟡 Medium-risk patterns → restrict behavior
+    if lowered.contains("modify") {
+        return EchoGateDecision {
+            action: GateAction::Pause,
+            delta: 0.5,
+        };
+    }
+
+    // 🟢 Default → safe
+    EchoGateDecision {
+        action: GateAction::Proceed,
+        delta: 0.1,
+    }
+}
+
+impl CharonService {
+    fn retain_preferred_local_surface_candidates(
+        candidates: &mut Vec<RouteSelectionCandidate>,
+        providers: &[ProviderState],
+        route_profile: &RouteExecutionProfile,
+    ) {
+        match route_profile.execution_lane.as_str() {
+            "execution" | "background" => {}
+            _ => return,
+        }
+
+        let preferred_surface = std::env::var("ANNUNIMAS_LOCAL_INFERENCE_SURFACE")
+            .unwrap_or_else(|_| "hybrid".to_string())
+            .trim()
+            .to_ascii_lowercase();
+
+        match preferred_surface.as_str() {
+            "mesh" => {
+                if candidates.iter().any(|candidate| {
+                    is_primary_local_surface_provider(&providers[candidate.provider_index].id)
+                }) {
+                    candidates.retain(|candidate| {
+                        is_primary_local_surface_provider(&providers[candidate.provider_index].id)
+                    });
+                }
+            }
+            "llamacpp" => {
+                if candidates.iter().any(|candidate| {
+                    let id = &providers[candidate.provider_index].id;
+                    is_local_provider(id) && !is_primary_local_surface_provider(id)
+                }) {
+                    candidates.retain(|candidate| {
+                        let id = &providers[candidate.provider_index].id;
+                        is_local_provider(id) && !is_primary_local_surface_provider(id)
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn retain_orchestrator_context_fit_candidates(
+        candidates: &mut Vec<RouteSelectionCandidate>,
+        route_profile: &RouteExecutionProfile,
+    ) {
+        if route_profile.execution_lane != "orchestrator" {
+            return;
+        }
+        candidates.retain(|candidate| {
+            candidate.model.context_window >= route_profile.context_window_target
+        });
+    }
+
+    pub fn from_default_or_fallback() -> Result<Self> {
+        let primary = default_root();
+        match Self::new(&primary) {
+            Ok(v) => Ok(v),
+            Err(err) => {
+                if !is_permission_error(&err) {
+                    return Err(err);
+                }
+                Self::new(PathBuf::from("data").join("charon"))
+            }
+        }
+    }
+
+    pub fn new(root: impl AsRef<Path>) -> Result<Self> {
+        let root = root.as_ref().to_path_buf();
+        fs::create_dir_all(&root)?;
+        let state_path = root.join("state.jsonl");
+        let socket_path = root.join("charon.sock");
+        let config_path = default_provider_config_path();
+        let bootstrap_state_path = default_bootstrap_state_path();
+        touch(&state_path)?;
+        let providers = match load_providers_from_config(&config_path, &bootstrap_state_path) {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::warn!(error = %err, path = %config_path.display(), "CHARON provider config load failed, using >
+                default_providers()
+            }
+        };
+        let service = Self {
+            root,
+            state_path,
+            socket_path,
+            config_path,
+            bootstrap_state_path,
+            providers: Arc::new(RwLock::new(providers)),
+            mnemosyne: MnemosyneService::from_default_or_fallback().ok(),
+        };
+        Ok(service)
+    }
+
+    pub async fn state(&self) -> Result<serde_json::Value> {
+        let mut providers = self.providers.write().await;
+        refresh_provider_windows(&mut providers, Utc::now());
+        let package_runtime = self.read_package_runtime_signals();
+        let build_cache = self.read_runtime_build_cache_signals();
+        let budget_pressure = build_budget_pressure_summary(&providers);
+        let alerts = build_budget_alerts(&budget_pressure);
+        Ok(serde_json::json!({
+            "charon_version": "0.1.0",
+            "timestamp_utc": Utc::now().to_rfc3339(),
+            "providers": providers.clone(),
+            "budget_pressure": budget_pressure,
+            "alerts": alerts,
+            "package_runtime_signals": package_runtime,
+            "runtime_build_cache": build_cache,
+        }))
+    }
+
+    pub async fn providers(&self) -> Vec<ProviderState> {
+        let mut providers = self.providers.write().await;
+        refresh_provider_windows(&mut providers, Utc::now());
+        providers.clone()
+    }
+
+    pub fn recent_state_events(&self, limit: usize) -> Vec<serde_json::Value> {
+        read_recent_jsonl(&self.state_path, limit)
+    }
+
+    pub async fn route_preview(&self, req: CharonRequestEnvelope) -> Result<RouteDecision> {
+        let mut providers = self.providers.write().await;
+        let now = Utc::now();
+        refresh_provider_windows(&mut providers, now);
+        let priority = req.priority.to_ascii_lowercase();
+        let strict = req
+            .options
+            .get("strict")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let forced_provider_id = req
+            .options
+            .get("force_provider_id")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let forced_model_id = req
+            .options
+            .get("force_model_id")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let excluded_provider_ids = excluded_provider_ids(&req.options);
+        let policy = resolve_hybrid_route_policy(&req.options);
+        let route_profile = derive_route_execution_profile(&req, &priority);
+        let package_runtime = self.read_package_runtime_signals();
+
+        let candidate = self.select_route_candidate(
+            &providers,
+            &req,
+            &priority,
+            strict,
+            forced_provider_id.as_deref(),
+            forced_model_id.as_deref(),
+            &excluded_provider_ids,
+            &policy,
+            &route_profile,
+            &package_runtime,
+        )?;
+
+        Ok(build_route_decision(
+            &providers[candidate.provider_index],
+            candidate.model,
+            candidate.score,
+            &req,
+            &priority,
+            strict,
+            &policy,
+            &route_profile,
+        ))
+    }
+
+    pub async fn route(&self, req: CharonRequestEnvelope) -> Result<RouteDecision> {
+        let mut bacon_task =
+            Task::new(format!("route {} {}", req.agent_id, req.task_type), "route");
+        bacon_task.clarifications_resolved = if !req.priority.is_empty() { 1 } else { 0 };
+        let mut providers = self.providers.write().await;
+        let now = Utc::now();
+        refresh_provider_windows(&mut providers, now);
+        let priority = req.priority.to_ascii_lowercase();
+        let strict = req
+            .options
+            .get("strict")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let forced_provider_id = req
+            .options
+            .get("force_provider_id")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let forced_model_id = req
+            .options
+            .get("force_model_id")
+            .and_then(|v| v.as_str())
+            .map(|v| v.to_string());
+        let excluded_provider_ids = excluded_provider_ids(&req.options);
+        let policy = resolve_hybrid_route_policy(&req.options);
+
+        let route_profile = derive_route_execution_profile(&req, &priority);
+        let package_runtime = self.read_package_runtime_signals();
+        let candidate = match self.select_route_candidate(
+            &providers,
+            &req,
+            &priority,
+            strict,
+            forced_provider_id.as_deref(),
+            forced_model_id.as_deref(),
+            &excluded_provider_ids,
+            &policy,
+            &route_profile,
+            &package_runtime,
+        ) {
+            Ok(candidate) => candidate,
+            Err(err) => {
+                self.append_state_event(
+                    "route_failed",
+                    serde_json::json!({
+                        "task_type": req.task_type,
+                        "agent_id": req.agent_id,
+                        "priority": priority,
+                        "policy": policy,
+                        "strict": strict,
+                        "forced_provider_id": forced_provider_id,
+                        "unavailable": providers.iter().map(|p| {
+                            provider_unavailable_reason(p, &priority, strict, now)
+                                .unwrap_or_else(|| serde_json::json!({"provider_id": p.id, "reason": "filtered"}))
+                        }).collect::<Vec<_>>(),
+                    }),
+                )?;
+                self.emit_work_signal_background(
+                    "charon",
+                    0.2,
+                    JouleWorkUnit::Reasoning,
+                    Some(format!("route_failed:{}:{}", req.agent_id, req.task_type)),
+                );
+                self.emit_memory_event(
+                    "route_failed",
+                    &format!(
+                        "CHARON failed route for {}:{} priority={}",
+                        req.agent_id, req.task_type, priority
+                    ),
+                    Some(0.35),
+                    vec![
+                        "charon".to_string(),
+                        "route".to_string(),
+                        "failure".to_string(),
+                    ],
+                );
+                if let Err(record_err) = record_bacon_lite(
+                    "charon",
+                    "route_failed",
+                    &bacon_task,
+                    serde_json::json!({
+                        "agent_id": req.agent_id,
+                        "task_type": req.task_type,
+                        "priority": priority,
+                        "policy": policy,
+                    }),
+                ) {
+                    tracing::debug!(error = %record_err, "CHARON bacon-lite route_failed record failed");
+                }
+                return Err(err);
+            }
+        };
+
+        {
+            let provider = &mut providers[candidate.provider_index];
+            if provider.requests_used_minute == 0 {
+                provider.minute_window_started_utc = Some(now.to_rfc3339());
+            }
+            if provider.requests_used_day == 0 {
+                provider.day_window_started_utc = Some(now.to_rfc3339());
+            }
+            provider.requests_used_minute += 1;
+            provider.requests_used_day += 1;
+            provider.consecutive_successes += 1;
+            provider.active_connections += 1;
+            provider.last_reservation_utc = Some(now.to_rfc3339());
+            provider.consecutive_failures = 0;
+            provider.last_error = None;
+            bacon_task.joule_cost_estimated = 1.0;
+            bacon_task.joule_cost_actual = (candidate.score / 100.0).clamp(0.25, 1.25);
+            let triad = triad_validate(&bacon_task, None);
+            let decision = build_route_decision_with_triad(
+                provider,
+                candidate.model,
+                candidate.score,
+                &req,
+                &priority,
+                strict,
+                &policy,
+                &route_profile,
+                triad,
+            );
+            if let Err(err) = record_bacon_lite(
+                "charon",
+                "route_selected",
+                &bacon_task,
+                serde_json::json!({
+                    "agent_id": req.agent_id,
+                    "task_type": req.task_type,
+                    "priority": priority,
+                    "policy": policy,
+                    "package_runtime": {
+                        "llmfit_backend": package_runtime.llmfit_backend,
+                        "llmfit_recommendation_count": package_runtime.llmfit_recommendation_count,
+                        "nanoclaw_runtime_ready": package_runtime.nanoclaw_runtime_ready,
+                        "nanoclaw_probe_state": package_runtime.nanoclaw_probe_state,
+                    },
+                    "route_profile": {
+                        "route_class": route_profile.route_class,
+                        "execution_lane": route_profile.execution_lane,
+                        "context_window_target": route_profile.context_window_target,
+                    },
+                    "provider_id": decision.provider_id,
+                    "model_id": decision.model_id,
+                }),
+            ) {
+                tracing::debug!(error = %err, "CHARON bacon-lite route_selected record failed");
+            }
+            self.append_state_event("route_selected", serde_json::to_value(&decision)?)?;
+            self.emit_work_signal_background(
+                "charon",
+                (candidate.score / 100.0).clamp(0.2, 1.0),
+                JouleWorkUnit::Reasoning,
+                Some(format!("route:{}:{}", req.agent_id, req.task_type)),
+            );
+            self.emit_relationship_signal_background(
+                &req.agent_id,
+                &decision.provider_id,
+                &decision.governance.love_equation_guard,
+            );
+            self.emit_memory_event(
+                "route_selected",
+                &format!(
+                    "CHARON routed {}:{} [{}:{}] -> {}:{} triad_passed={} love_eq={:.2}",
+                    req.agent_id,
+                    req.task_type,
+                    decision.execution_lane,
+                    decision.route_class,
+                    decision.provider_id,
+                    decision.model_id,
+                    decision.governance.triad_passed,
+                    decision.governance.love_equation_guard.score
+                ),
+                Some((candidate.score / 100.0).clamp(0.0, 1.0)),
+                vec![
+                    "charon".to_string(),
+                    "route".to_string(),
+                    decision.execution_lane.clone(),
+                    if decision.governance.triad_passed {
+                        "triad_passed".to_string()
+                    } else {
+                        "triad_failed".to_string()
+                    },
+                ],
+            );
+            return Ok(decision);
+        }
+    }
+
+    fn select_route_candidate(
+        &self,
+        providers: &[ProviderState],
+        req: &CharonRequestEnvelope,
+        priority: &str,
+        strict: bool,
+        forced_provider_id: Option<&str>,
+        forced_model_id: Option<&str>,
+        excluded_provider_ids: &[String],
+        policy: &HybridRoutePolicy,
+        route_profile: &RouteExecutionProfile,
+        package_runtime: &PackageRuntimeSignals,
+    ) -> Result<RouteSelectionCandidate> {
+        let lane_fitness = self.read_lane_fitness_snapshot();
+        let mut candidates = providers
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| provider_eligible(p, priority, strict))
+            .filter(|(_, p)| {
+                forced_provider_id
+                    .map(|forced| p.id == forced)
+                    .unwrap_or(true)
+            })
+            .filter(|(_, p)| {
+                !excluded_provider_ids
+                    .iter()
+                    .any(|excluded| excluded == &p.id)
+            })
+            .filter_map(|(idx, p)| {
+                let model = select_model(&p.models, &req.task_type, forced_model_id)?;
+                let score = provider_score(
+                    p,
+                    &model,
+                    priority,
+                    policy,
+                    route_profile,
+                    package_runtime,
+                    &lane_fitness,
+                );
+                Some(RouteSelectionCandidate {
+                    provider_index: idx,
+                    model,
+                    score,
+                })
+            })
+            .collect::<Vec<_>>();
+
+// 🔥🔥🔥 ECHO GATE START 🔥🔥🔥
+
+// Build input string from messages
+let input_text = req
+    .messages
+    .iter()
+    .filter_map(|m| m.get("content").and_then(|v| v.as_str()))
+    .collect::<Vec<_>>()
+    .join(" ");
+
+// Run gate
+let gate = evaluate_echo_gate(&input_text);
+
+println!(
+    "🧠 Echo Gate → Δ={:.2} action={:?}",
+    gate.delta, gate.action
+);
+
+// 🔴 HARD STOP
+if matches!(gate.action, GateAction::Abort) {
+    return Err(AnnunimasError::Agent {
+        agent: "charon".to_string(),
+        message: "Echo Gate ABORT".to_string(),
+    });
+}
+
+// 🔴 STRICT MODE → LOCAL ONLY
+if gate.delta >= 0.50 {
+    if candidates.iter().any(|c| {
+        let id = &providers[c.provider_index].id;
+        is_local_provider(id)
+    }) {
+        candidates.retain(|c| {
+            let id = &providers[c.provider_index].id;
+            is_local_provider(id)
+        });
+    }
+}
+
+// 🟡 SOFT INFLUENCE (score shaping)
+for c in candidates.iter_mut() {
+    c.score -= gate.delta * 20.0;
+}
+
+// 🔥🔥🔥 ECHO GATE END 🔥🔥🔥
+
+        if policy.require_local {
+            if candidates
+                .iter()
+                .any(|candidate| is_local_provider(&providers[candidate.provider_index].id))
+            {
+                candidates
+                    .retain(|candidate| is_local_provider(&providers[candidate.provider_index].id));
+            } else {
+                self.append_state_event(
+                    "route_failed_policy",
+                    serde_json::json!({
+                        "agent_id": req.agent_id,
+                        "task_type": req.task_type,
+                        "priority": priority,
+                        "policy": policy,
+                        "reason": "privacy_requires_local_but_no_local_provider_available"
+                    }),
+                )?;
+                return Err(AnnunimasError::Agent {
+                    agent: "charon".to_string(),
+                    message:
+                        "route blocked by policy: privacy tier requires local provider but none available"
+                            .to_string(),
+                });
+            }
+        }
+
+        if !policy.require_local {
+            if policy.origin_preference == "local"
+                && candidates
+                    .iter()
+                    .any(|candidate| is_local_provider(&providers[candidate.provider_index].id))
+            {
+                candidates
+                    .retain(|candidate| is_local_provider(&providers[candidate.provider_index].id));
+            } else if policy.origin_preference == "cloud"
+                && candidates
+                    .iter()
+                    .any(|candidate| !is_local_provider(&providers[candidate.provider_index].id))
+            {
+                candidates.retain(|candidate| {
+                    !is_local_provider(&providers[candidate.provider_index].id)
+                });
+            }
+        }
+
+        Self::retain_orchestrator_context_fit_candidates(&mut candidates, route_profile);
+        Self::retain_cost_tier_orchestrator_candidates(
+            &mut candidates,
+            providers,
+            policy,
+            route_profile,
+        );
+        Self::retain_preferred_local_surface_candidates(&mut candidates, providers, route_profile);
+
+        if is_high_priority(priority)
+            && candidates
+                .iter()
+                .any(|candidate| !is_local_provider(&providers[candidate.provider_index].id))
+        {
+            candidates
+                .retain(|candidate| !is_local_provider(&providers[candidate.provider_index].id));
+        }
+
+        if is_background_priority(priority)
+            && candidates
+                .iter()
+                .any(|candidate| is_local_provider(&providers[candidate.provider_index].id))
+        {
+            candidates
+                .retain(|candidate| is_local_provider(&providers[candidate.provider_index].id));
+        }
+
+        apply_soft_lane_caps(&mut candidates, providers, route_profile);
+        candidates.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        candidates
+            .into_iter()
+            .next()
+            .ok_or_else(|| AnnunimasError::Agent {
+                agent: "charon".to_string(),
+                message: format!(
+                    "no provider available for request (priority={}, strict={})",
+                    priority, strict
+                ),
+            })
+    }
+
+    fn retain_cost_tier_orchestrator_candidates(
+        candidates: &mut Vec<RouteSelectionCandidate>,
+        providers: &[ProviderState],
+        policy: &HybridRoutePolicy,
+        route_profile: &RouteExecutionProfile,
+    ) {
+        if route_profile.execution_lane != "orchestrator" || policy.cost_tier != "low" {
+            return;
+        }
+
+        let fits_context = |candidate: &RouteSelectionCandidate| {
+            candidate.model.context_window >= route_profile.context_window_target
+        };
+        let tier_of = |candidate: &RouteSelectionCandidate| {
+            access_tier_class(&providers[candidate.provider_index])
+        };
+
+        for tier in ["free_cloud", "local", "mixed", "paid_cloud"] {
+            if candidates
+                .iter()
+                .any(|candidate| tier_of(candidate) == tier && fits_context(candidate))
+            {
+                candidates
+                    .retain(|candidate| tier_of(candidate) == tier && fits_context(candidate));
+                return;
+            }
+        }
+
+        for tier in ["free_cloud", "local", "mixed", "paid_cloud"] {
+            if candidates
+                .iter()
+                .any(|candidate| tier_of(candidate) == tier)
+            {
+                candidates.retain(|candidate| tier_of(candidate) == tier);
+                return;
+            }
+        }
+    }
+
+    pub async fn proxy_openai(&self, req: CharonRequestEnvelope) -> Result<serde_json::Value> {
+        let mut body = serde_json::json!({
+            "model": req
+                .options
+                .get("force_model_id")
+                .cloned()
+                .unwrap_or(JsonValue::Null),
+            "messages": req.messages,
+        });
+        for key in [
+            "max_tokens",
+            "temperature",
+            "top_p",
+            "stream",
+            "response_format",
+            "tools",
+            "tool_choice",
+            "stop",
+        ] {
+            if let Some(v) = req.options.get(key) {
+                body[key] = v.clone();
+            }
+        }
+        if body.get("model").is_some_and(|v| v.is_null()) {
+            body.as_object_mut().map(|obj| obj.remove("model"));
+        }
+
+        let (decision, provider_id, url, latency_ms, status, parsed) =
+            self.proxy_openai_request(req, body).await?;
+        Ok(serde_json::json!({
+            "ok": true,
+            "dry_run": false,
+            "route": decision,
+            "provider_id": provider_id,
+            "url": url,
+            "status": status,
+            "latency_ms": latency_ms,
+            "response": parsed
+        }))
+    }
+
+    pub async fn proxy_openai_passthrough(
+        &self,
+        req: CharonRequestEnvelope,
+        body: JsonValue,
+    ) -> Result<(u16, JsonValue)> {
+        let (_, _, _, _, status, parsed) = self.proxy_openai_request(req, body).await?;
+        Ok((status, parsed))
+    }
+
+    pub fn paths(&self) -> serde_json::Value {
+        serde_json::json!({
+            "root": self.root,
+            "state_path": self.state_path,
+            "socket_path": self.socket_path,
+            "config_path": self.config_path,
+            "bootstrap_state_path": self.bootstrap_state_path,
+            "lane_fitness_path": self.lane_fitness_path(),
+        })
+    }
+
+
+    fn append_state_event(&self, event: &str, payload: serde_json::Value) -> Result<()> {
+        append_jsonl(
+            &self.state_path,
+            &serde_json::json!({
+                "ts": Utc::now().to_rfc3339(),
+                "event": event,
+                "payload": payload
+            }),
+        )
+    }
+
+    fn emit_memory_event(
+        &self,
+        event_type: &str,
+        content: &str,
+        confidence_hint: Option<f64>,
+        tags: Vec<String>,
+    ) {
+        if let Some(service) = &self.mnemosyne {
+            let event = InformantEvent {
+                informant_id: "charon_mneme".to_string(),
+                crate_name: "charon".to_string(),
+                event_type: event_type.to_string(),
+                ts_utc: Utc::now().to_rfc3339(),
+                content: content.to_string(),
+                confidence_hint,
+                tags,
+            };
+            if let Err(err) = service.encode(event) {
+                tracing::debug!(error = %err, "CHARON memory emission failed");
+            }
+        }
+    }
+
+    async fn record_work_signal_async(
+        &self,
+        agent_id: &str,
+        amount: f64,
+        unit: JouleWorkUnit,
+        task_id: Option<String>,
+    ) -> Result<()> {
+        let plutus = PlutusService::from_default_or_workspace_fallback().map_err(|err| {
+            AnnunimasError::Agent {
+                agent: "charon".to_string(),
+                message: format!("plutus work signal init failed: {err}"),
+            }
+        })?;
+        plutus
+            .track_work(agent_id, amount, unit, task_id)
+            .await
+            .map_err(|err| AnnunimasError::Agent {
+                agent: "charon".to_string(),
+                message: format!("plutus work signal failed: {err}"),
+            })?;
+        Ok(())
+    }
+
+    async fn record_relationship_signal_async(
+        &self,
+        from: &str,
+        to: &str,
+        resonance: f64,
+        attention: f64,
+        reciprocity: f64,
+    ) -> Result<()> {
+        let plutus = PlutusService::from_default_or_workspace_fallback().map_err(|err| {
+            AnnunimasError::Agent {
+                agent: "charon".to_string(),
+                message: format!("plutus relationship signal init failed: {err}"),
+            }
+        })?;
+        plutus
+            .record_relationship(from, to, resonance, attention, reciprocity)
+            .await
+            .map_err(|err| AnnunimasError::Agent {
+                agent: "charon".to_string(),
+                message: format!("plutus relationship signal failed: {err}"),
+            })?;
+        Ok(())
+    }
+
+    fn emit_work_signal_background(
+        &self,
+        agent_id: &str,
+        amount: f64,
+        unit: JouleWorkUnit,
+        task_id: Option<String>,
+    ) {
+        let service = self.clone();
+        let agent_id = agent_id.to_string();
+        tokio::spawn(async move {
+            if let Err(err) = service
+                .record_work_signal_async(&agent_id, amount, unit, task_id)
+                .await
+            {
+                tracing::debug!(error = %err, "CHARON plutus work signal failed");
+            }
+        });
+    }
+
+    fn emit_relationship_signal_background(
+        &self,
+        from: &str,
+        to: &str,
+        guard: &RouteLoveEquationGuard,
+    ) {
+        let service = self.clone();
+        let from = from.to_string();
+        let to = to.to_string();
+        let resonance = guard.resonance;
+        let attention = guard.attention;
+        let reciprocity = guard.reciprocity;
+        tokio::spawn(async move {
+            if let Err(err) = service
+                .record_relationship_signal_async(&from, &to, resonance, attention, reciprocity)
+                .await
+            {
+                tracing::debug!(error = %err, "CHARON plutus relationship signal failed");
+            }
+        });
+    }
+}
+
+impl CharonService {
+    fn read_lane_fitness_snapshot(&self) -> LaneFitnessSnapshot {
+        let path = self.lane_fitness_path();
+        let mut snapshot = fs::read_to_string(&path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<LaneFitnessSnapshot>(&content).ok())
+            .unwrap_or_else(|| LaneFitnessSnapshot {
+                generated_at_utc: Utc::now().to_rfc3339(),
+                lanes: std::collections::BTreeMap::new(),
+            });
+        if decay_lane_fitness_snapshot(&mut snapshot) {
+            let _ = fs::write(
+                &path,
+                serde_json::to_string_pretty(&snapshot).unwrap_or_else(|_| "{}".to_string()) + "\n",
+            );
+        }
+        snapshot
+    }
+
+    fn update_lane_fitness(
+        &self,
+        lane: &str,
+        provider_id: &str,
+        ok: bool,
+        latency_ms: Option<u64>,
+    ) -> Result<()> {
+        let mut snapshot = self.read_lane_fitness_snapshot();
+        let lane_entry = snapshot.lanes.entry(lane.to_string()).or_default();
+        let provider_entry = lane_entry.entry(provider_id.to_string()).or_default();
+        provider_entry.last_result_utc = Some(Utc::now().to_rfc3339());
+        if ok {
+            provider_entry.success_count += 1;
+            provider_entry.avg_latency_ms =
+                merge_latency(provider_entry.avg_latency_ms, latency_ms);
+        } else {
+            provider_entry.failure_count += 1;
+        }
+        snapshot.generated_at_utc = Utc::now().to_rfc3339();
+        fs::write(
+            self.lane_fitness_path(),
+            serde_json::to_string_pretty(&snapshot).unwrap_or_else(|_| "{}".to_string()) + "\n",
+        )?;
+        Ok(())
+    }
+
+    async fn proxy_openai_request(
+        &self,
+        req: CharonRequestEnvelope,
+        body: JsonValue,
+    ) -> Result<(RouteDecision, String, String, u64, u16, JsonValue)> {
+        let endpoint = req
+            .options
+            .get("endpoint")
+            .and_then(|v| v.as_str())
+            .unwrap_or("/chat/completions");
+        let dry_run = req
+            .options
+            .get("dry_run")
+            .and_then(|v| v.as_bool())
+            .unwrap_or_else(|| {
+                std::env::var("ANNUNIMAS_CHARON_PROXY_DRY_RUN")
+                    .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+                    .unwrap_or(false)
+            });
+
+        let mut excluded = excluded_provider_ids(&req.options);
+        let mut routed_req = req.clone();
+        let mut last_error = None;
+        let forced_provider_id = req
+            .options
+            .get("force_provider_id")
+            .and_then(|value| value.as_str())
+            .map(str::to_string);
+        let max_attempts = {
+            let providers = self.providers.read().await;
+            proxy_max_attempts(providers.len())
+        };
+
+        for _attempt in 0..max_attempts {
+            if !excluded.is_empty() {
+                routed_req.options["exclude_provider_ids"] = serde_json::json!(excluded);
+            }
+            let decision = self.route(routed_req.clone()).await?;
+            let provider = {
+                let providers = self.providers.read().await;
+                providers
+                    .iter()
+                    .find(|p| p.id == decision.provider_id)
+                    .cloned()
+                    .ok_or_else(|| AnnunimasError::Agent {
+                        agent: "charon".to_string(),
+                        message: format!("selected provider {} not found", decision.provider_id),
+                    })?
+            };
+
+            let base_url = provider
+                .base_url
+                .clone()
+                .ok_or_else(|| AnnunimasError::Agent {
+                    agent: "charon".to_string(),
+                    message: format!(
+                        "provider {} missing base_url for proxy forwarding",
+                        provider.id
+                    ),
+                })?;
+            let url = format!(
+                "{}/{}",
+                base_url.trim_end_matches('/'),
+                endpoint.trim_start_matches('/')
+            );
+
+            let mut attempt_body = body.clone();
+            if let Some(payload) = attempt_body.as_object_mut() {
+                payload.insert(
+                    "model".to_string(),
+                    JsonValue::String(decision.model_id.clone()),
+                );
+                payload.remove("extra_body");
+            } else {
+                attempt_body = serde_json::json!({
+                    "model": decision.model_id,
+                    "messages": []
+                });
+            }
+            if is_local_provider(&provider.id) {
+                slim_local_attempt_body(&mut attempt_body);
+            }
+
+            if dry_run {
+                let _ = self.release_provider_reservation(&provider.id).await;
+                return Ok((
+                    decision,
+                    provider.id,
+                    url,
+                    0,
+                    200,
+                    serde_json::json!({"ok": true, "dry_run": true, "request": attempt_body}),
+                ));
+            }
+
+            let start = Instant::now();
+            let request_timeout =
+                proxy_timeout_for_provider(&provider.id, &decision.execution_lane);
+            let client = reqwest::Client::builder()
+                .timeout(request_timeout)
+                .build()
+                .map_err(|err| AnnunimasError::Agent {
+                    agent: "charon".to_string(),
+                    message: format!("failed to build HTTP client: {err}"),
+                })?;
+            let mut request = client.post(&url).json(&attempt_body);
+            if let Some(env_key) = provider.api_key_env.as_deref() {
+                if let Ok(key) = std::env::var(env_key) {
+                    if !key.trim().is_empty() {
+                        request = request.bearer_auth(key);
+                    }
+                }
+            }
+
+            let response = match request.send().await {
+                Ok(response) => response,
+                Err(err) => {
+                    let err_msg = format!("proxy request failed to {}: {err}", provider.id);
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    let _ = self
+                        .mark_provider_result(
+                            &provider.id,
+                            false,
+                            Some(latency_ms),
+                            Some(err_msg.clone()),
+                        )
+                        .await;
+                    let _ = self
+                        .mark_model_result(
+                            &provider.id,
+                            &decision.model_id,
+                            false,
+                            Some(latency_ms),
+                            Some(err_msg.clone()),
+                        )
+                        .await;
+                    let _ = self.update_lane_fitness(
+                        &decision.execution_lane,
+                        &provider.id,
+                        false,
+                        Some(latency_ms),
+                    );
+                    if transport_failure_should_trigger_cooldown(&provider.id, &err_msg)
+                        && !provider_has_alternate_routable_model(
+                            &provider,
+                            &decision.model_id,
+                            &req.task_type,
+                        )
+                    {
+                        let _ = self.mark_provider_cooldown(&provider.id, 300).await;
+                    }
+                    if !provider_has_alternate_routable_model(
+                        &provider,
+                        &decision.model_id,
+                        &req.task_type,
+                    ) {
+                        excluded.push(provider.id.clone());
+                        routed_req.options["exclude_provider_ids"] = serde_json::json!(excluded);
+                    }
+                    last_error = Some(err_msg);
+                    if forced_provider_id.as_deref() == Some(provider.id.as_str()) {
+                        break;
+                    }
+                    continue;
+                }
+            };
+            let latency_ms = start.elapsed().as_millis() as u64;
+            let status = response.status();
+            let status_u16 = status.as_u16();
+            let response_headers = response.headers().clone();
+            let text = response.text().await.unwrap_or_default();
+            let mut parsed = serde_json::from_str::<serde_json::Value>(&text)
+                .unwrap_or_else(|_| serde_json::json!({"raw": text}));
+
+            let _ = self
+                .apply_provider_rate_limit_hints(&provider.id, &response_headers)
+                .await;
+
+            if status.is_success() {
+                normalize_openai_response(&mut parsed);
+                attach_charon_route_metadata(&mut parsed, &decision, &provider.id, latency_ms);
+                let _ = self
+                    .mark_provider_result(&provider.id, true, Some(latency_ms), None)
+                    .await;
+                let _ = self
+                    .mark_model_result(
+                        &provider.id,
+                        &decision.model_id,
+                        true,
+                        Some(latency_ms),
+                        None,
+                    )
+                    .await;
+                let _ = self.update_lane_fitness(
+                    &decision.execution_lane,
+                    &provider.id,
+                    true,
+                    Some(latency_ms),
+                );
+                self.emit_memory_event(
+                    "proxy_success",
+                    &format!(
+                        "CHARON proxy forwarded via {} in {}ms",
+                        provider.id, latency_ms
+                    ),
+                    Some(0.85),
+                    vec!["charon".to_string(), "proxy".to_string()],
+                );
+                return Ok((decision, provider.id, url, latency_ms, status_u16, parsed));
+            }
+
+            let err_msg = format!("provider {} HTTP {}", provider.id, status_u16);
+            let _ = self
+                .mark_provider_result(&provider.id, false, Some(latency_ms), Some(err_msg.clone()))
+                .await;
+            if let Some(cooldown_seconds) =
+                provider_error_immediate_cooldown_seconds(&provider.id, status_u16, &parsed)
+            {
+                let _ = self
+                    .mark_provider_cooldown(&provider.id, cooldown_seconds)
+                    .await;
+            }
+            if model_error_should_mark_unavailable(status_u16, &parsed) {
+                let _ = self
+                    .mark_model_result(
+                        &provider.id,
+                        &decision.model_id,
+                        false,
+                        Some(latency_ms),
+                        Some(format!("{err_msg}: {parsed}")),
+                    )
+                    .await;
+            }
+            let _ = self.update_lane_fitness(
+                &decision.execution_lane,
+                &provider.id,
+                false,
+                Some(latency_ms),
+            );
+            self.emit_memory_event(
+                "proxy_failure",
+                &format!("CHARON proxy failure via {}: {}", provider.id, err_msg),
+                Some(0.4),
+                vec![
+                    "charon".to_string(),
+                    "proxy".to_string(),
+                    "failure".to_string(),
+                ],
+            );
+            if provider_error_should_fallback(status_u16, &parsed) {
+                if !model_error_should_mark_unavailable(status_u16, &parsed)
+                    || !provider_has_alternate_routable_model(
+                        &provider,
+                        &decision.model_id,
+                        &req.task_type,
+                    )
+                {
+                    excluded.push(provider.id.clone());
+                    routed_req.options["exclude_provider_ids"] = serde_json::json!(excluded);
+                }
+                last_error = Some(format!("{err_msg}: {parsed}"));
+                if forced_provider_id.as_deref() == Some(provider.id.as_str()) {
+                    break;
+                }
+                continue;
+            }
+            return Err(AnnunimasError::Agent {
+                agent: "charon".to_string(),
+                message: format!("{err_msg}: {parsed}"),
+            });
+        }
+
+        Err(AnnunimasError::Agent {
+            agent: "charon".to_string(),
+            message: last_error
+                .unwrap_or_else(|| "proxy routing exhausted all fallback providers".to_string()),
+        })
+    }
+}
+
+fn proxy_timeout_for_provider(provider_id: &str, execution_lane: &str) -> StdDuration {
+    if provider_id == "mesh_local" {
+        return match execution_lane {
+            "orchestrator" => StdDuration::from_secs(120),
+            "execution" => StdDuration::from_secs(90),
+            "background" => StdDuration::from_secs(60),
+            _ => StdDuration::from_secs(90),
+        };
+    }
+    if is_local_provider(provider_id) {
+        return match execution_lane {
+            "orchestrator" => StdDuration::from_secs(30),
+            "execution" => StdDuration::from_secs(20),
+            "background" => StdDuration::from_secs(15),
+            _ => StdDuration::from_secs(25),
+        };
+    }
+    match execution_lane {
+        "orchestrator" => StdDuration::from_secs(45),
+        "execution" => StdDuration::from_secs(35),
+        "background" => StdDuration::from_secs(25),
+        _ => StdDuration::from_secs(40),
+    }
+}
+
+fn provider_has_alternate_routable_model(
+    provider: &crate::types::ProviderState,
+    current_model_id: &str,
+    task_type: &str,
+) -> bool {
+    provider.models.iter().any(|model| {
+        model.id != current_model_id
+            && model.healthy
+            && !model.in_cooldown
+            && (model.capable_tasks.iter().any(|task| task == task_type) || model.is_default)
+    })
+}
+
+fn normalize_openai_response(response: &mut JsonValue) {
+    let Some(choices) = response
+        .get_mut("choices")
+        .and_then(JsonValue::as_array_mut)
+    else {
+        return;
+    };
+    for choice in choices {
+        let Some(message) = choice.get_mut("message").and_then(JsonValue::as_object_mut) else {
+            continue;
+        };
+        let Some(content) = message.get("content").and_then(JsonValue::as_str) else {
+            continue;
+        };
+        let normalized = content
+            .strip_prefix("</think>")
+            .map(str::trim_start)
+            .unwrap_or(content);
+        if normalized != content {
+            message.insert(
+                "content".to_string(),
+                JsonValue::String(normalized.to_string()),
+            );
+        }
+    }
+}
+
+fn attach_charon_route_metadata(
+    response: &mut JsonValue,
+    decision: &RouteDecision,
+    provider_id: &str,
+    latency_ms: u64,
+) {
+
+    let Some(obj) = response.as_object_mut() else {
+        return;
+    };
+    obj.insert(
+        "_charon_route".to_string(),
+        serde_json::json!({
+            "provider_id": provider_id,
+            "model_id": decision.model_id,
+            "execution_lane": decision.execution_lane,
+            "route_class": decision.route_class,
+            "context_window_target": decision.context_window_target,
+            "latency_ms": latency_ms,
+        }),
+    );
+}
+
+fn proxy_max_attempts(provider_count: usize) -> usize {
+    provider_count.clamp(3, 8)
+}
+
+fn provider_error_should_fallback(status_u16: u16, parsed: &JsonValue) -> bool {
+    if status_u16 >= 500 || matches!(status_u16, 408 | 429) {
+        return true;
+    }
+
+    let body = parsed.to_string().to_lowercase();
+    if body.contains("mesh request")
+        || body.contains("tunnel(s) to hosts")
+        || body.contains("hosts for none failed")
+    {
+        return true;
+    }
+
+    if status_u16 == 400
+        && [
+            "not currently available",
+            "exceeds the available context size",
+            "available context size",
+            "context length",
+            "context size",
+            "maximum context",
+            "max context",
+            "context window",
+            "too many tokens",
+            "prompt is too long",
+            "reduce the length",
+        ]
+        .iter()
+        .any(|needle| body.contains(needle))
+    {
+        return true;
+    }
+
+    if status_u16 != 402 {
+        return false;
+    }
+    [
+        "requires more credits",
+        "check credits",
+        "can only afford",
+        "fewer max_tokens",
+        "quota",
+        "insufficient credits",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
+}
+
+fn provider_error_immediate_cooldown_seconds(
+    provider_id: &str,
+    status_u16: u16,
+    parsed: &JsonValue,
+) -> Option<i64> {
+    if is_local_provider(provider_id) {
+        return None;
+    }
+
+    match status_u16 {
+        429 => Some(300),
+        402 if provider_error_should_fallback(status_u16, parsed) => Some(900),
+        _ => None,
+    }
+}
+
+fn slim_local_attempt_body(body: &mut JsonValue) {
+    let Some(obj) = body.as_object_mut() else {
+        return;
+    };
+
+    if let Some(messages) = obj.get_mut("messages").and_then(JsonValue::as_array_mut) {
+        flatten_local_tool_history(messages);
+        for message in messages.iter_mut() {
+            let Some(msg_obj) = message.as_object_mut() else {
+                continue;
+            };
+            let role = msg_obj
+                .get("role")
+                .and_then(JsonValue::as_str)
+                .unwrap_or_default();
+            if !matches!(role, "system" | "developer") {
+                continue;
+            }
+            let Some(content) = msg_obj.get_mut("content") else {
+                continue;
+            };
+            if let Some(text) = content.as_str() {
+                let trimmed = slim_prompt_text(text, 8_000);
+                if trimmed.len() != text.len() {
+                    *content = JsonValue::String(trimmed);
+                }
+            }
+        }
+    }
+
+    if let Some(tools) = obj.get_mut("tools").and_then(JsonValue::as_array_mut) {
+        for tool in tools.iter_mut() {
+            slim_tool_definition(tool);
+        }
+    }
+}
+
+fn flatten_local_tool_history(messages: &mut Vec<JsonValue>) {
+    for message in messages.iter_mut() {
+        let Some(msg_obj) = message.as_object_mut() else {
+            continue;
+        };
+        match msg_obj
+            .get("role")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default()
+        {
+            "assistant" => {
+                let tool_names = msg_obj
+                    .get("tool_calls")
+                    .and_then(JsonValue::as_array)
+                    .map(|calls| {
+                        calls
+                            .iter()
+                            .filter_map(|call| {
+                                call.get("function")
+                                    .and_then(JsonValue::as_object)
+                                    .and_then(|function| function.get("name"))
+                                    .and_then(JsonValue::as_str)
+                                    .map(str::to_string)
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                if !tool_names.is_empty() {
+                    let existing = msg_obj
+                        .get("content")
+                        .and_then(JsonValue::as_str)
+                        .unwrap_or_default();
+                    let summary = format!(
+                        "{}\n\n[Tool calls issued: {}]",
+                        existing,
+                        tool_names.join(", ")
+                    );
+                    msg_obj.insert(
+                        "content".to_string(),
+                        JsonValue::String(summary.trim().to_string()),
+                    );
+                    msg_obj.remove("tool_calls");
+                }
+            }
+            "tool" => {
+                let existing = msg_obj
+                    .get("content")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or_default();
+                let tool_id = msg_obj
+                    .get("tool_call_id")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or_default();
+                let flattened = if tool_id.is_empty() {
+                    format!(
+                        "[Tool result]\n{}",
+                        truncate_local_tool_text(existing, 4000)
+                    )
+                } else {
+                    format!(
+                        "[Tool result for {}]\n{}",
+                        tool_id,
+                        truncate_local_tool_text(existing, 4000)
+                    )
+                };
+                msg_obj.insert("role".to_string(), JsonValue::String("user".to_string()));
+                msg_obj.insert("content".to_string(), JsonValue::String(flattened));
+                msg_obj.remove("tool_call_id");
+            }
+            _ => {}
+        }
+    }
+}
+
+fn truncate_local_tool_text(text: &str, max_chars: usize) -> String {
+    if text.len() <= max_chars {
+        return text.to_string();
+    }
+    let head = safe_prefix(text, max_chars.saturating_sub(300));
+    let tail = safe_suffix(text, 180);
+    format!("{head}\n\n[tool output truncated]\n\n{tail}")
+}
+
+fn slim_prompt_text(text: &str, max_chars: usize) -> String {
+    if text.len() <= max_chars {
+        return text.to_string();
+    }
+    let head_chars = max_chars.saturating_sub(900);
+    let tail_chars = 700.min(max_chars / 4);
+    let head = safe_prefix(text, head_chars);
+    let tail = safe_suffix(text, tail_chars);
+    format!("{head}\n\n[CHARON local proxy trimmed oversized prompt for local inference]\n\n{tail}")
+}
+
+fn safe_prefix(text: &str, max_chars: usize) -> &str {
+    if text.len() <= max_chars {
+        return text;
+    }
+    let mut end = 0usize;
+    for (idx, _) in text.char_indices() {
+        if idx > max_chars {
+            break;
+        }
+        end = idx;
+    }
+    if end == 0 {
+        ""
+    } else {
+        &text[..end]
+    }
+}
+
+fn safe_suffix(text: &str, max_chars: usize) -> &str {
+    if text.len() <= max_chars {
+        return text;
+    }
+    let target = text.len().saturating_sub(max_chars);
+    let mut start = text.len();
+    for (idx, _) in text.char_indices() {
+        if idx >= target {
+            start = idx;
+            break;
+        }
+    }
+    &text[start..]
+}
+
+fn slim_tool_definition(tool: &mut JsonValue) {
+    let Some(tool_obj) = tool.as_object_mut() else {
+        return;
+    };
+    let Some(function) = tool_obj
+        .get_mut("function")
+        .and_then(JsonValue::as_object_mut)
+    else {
+        return;
+    };
+
+    if let Some(description) = function.get_mut("description") {
+        if let Some(text) = description.as_str() {
+            *description = JsonValue::String(text.chars().take(180).collect());
+        }
+    }
+
+    if let Some(parameters) = function.get_mut("parameters") {
+        slim_json_schema(parameters);
+    }
+}
+
+fn slim_json_schema(value: &mut JsonValue) {
+    match value {
+        JsonValue::Object(map) => {
+            map.remove("description");
+            map.remove("examples");
+            map.remove("example");
+            map.remove("default");
+            map.remove("title");
+            map.remove("$comment");
+            for key in ["properties", "definitions", "$defs"] {
+                if let Some(JsonValue::Object(props)) = map.get_mut(key) {
+                    for child in props.values_mut() {
+                        slim_json_schema(child);
+                    }
+                }
+            }
+            for key in [
+                "items",
+                "additionalProperties",
+                "contains",
+                "if",
+                "then",
+                "else",
+            ] {
+                if let Some(child) = map.get_mut(key) {
+                    slim_json_schema(child);
+                }
+            }
+            for key in ["oneOf", "anyOf", "allOf", "prefixItems"] {
+                if let Some(JsonValue::Array(items)) = map.get_mut(key) {
+                    for child in items.iter_mut() {
+                        slim_json_schema(child);
+                    }
+                }
+            }
+        }
+        JsonValue::Array(items) => {
+            for item in items.iter_mut() {
+                slim_json_schema(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn model_error_should_mark_unavailable(status_u16: u16, parsed: &JsonValue) -> bool {
+    let body = parsed.to_string().to_lowercase();
+    (status_u16 == 400 && body.contains("not currently available"))
+        || body.contains("mesh request")
+        || body.contains("tunnel(s) to hosts")
+        || body.contains("hosts for none failed")
+}
+
+fn transport_failure_should_trigger_cooldown(provider_id: &str, err_msg: &str) -> bool {
+    let lowered = err_msg.to_ascii_lowercase();
+    let local_provider = crate::service::route_policy::is_local_provider(provider_id);
+    local_provider
+        && [
+            "connection refused",
+            "error sending request",
+            "tcp connect error",
+            "dns error",
+            "channel closed",
+            "mesh request",
+            "tunnel(s) to hosts",
+            "hosts for none failed",
+        ]
+        .iter()
+        .any(|needle| lowered.contains(needle))
+}
+
+impl CharonService {
+    fn package_runtime_signals_path(&self) -> PathBuf {
+        self.root.join("package_runtime_signals.json")
+    }
+
+    fn lane_fitness_path(&self) -> PathBuf {
+        self.root.join("lane_fitness.json")
+    }
+}
+
+fn runtime_build_cache_state_path() -> PathBuf {
+    std::env::var("ANNUNIMAS_RUNTIME_BUILD_CACHE_STATE_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("core/state/runtime_build_cache.json"))
+}
+
+fn runtime_build_cache_command_program() -> String {
+    std::env::var("ANNUNIMAS_RUNTIME_BUILD_COMPACTOR").unwrap_or_else(|_| "cargo".to_string())
+}
+
+fn runtime_build_cache_command_args() -> Vec<String> {
+    std::env::var("ANNUNIMAS_RUNTIME_BUILD_COMPACTOR_ARGS")
+        .map(|value| {
+            value
+                .split_whitespace()
+                .map(|item| item.to_string())
+                .collect()
+        })
+        .unwrap_or_else(|_| {
+            vec![
+                "run".to_string(),
+                "-p".to_string(),
+                "annunimas-cli".to_string(),
+                "--".to_string(),
+                "control".to_string(),
+                "prune-runtime-build-cache".to_string(),
+            ]
+        })
+}
+
+fn runtime_build_cache_autorun_enabled() -> bool {
+    std::env::var("ANNUNIMAS_RUNTIME_BUILD_CACHE_AUTORUN")
+        .map(|value| value != "0")
+        .unwrap_or(true)
+}
+
+fn read_recent_jsonl(path: &Path, limit: usize) -> Vec<serde_json::Value> {
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(_) => return Vec::new(),
+    };
+    let mut values = Vec::new();
+    for line in content.lines().rev() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
+            values.push(value);
+            if values.len() >= limit {
+                break;
+            }
+        }
+    }
+    values.reverse();
+    values
+}
+
+fn count_malformed_jsonl(path: &Path) -> usize {
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(_) => return 0,
+    };
+    content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter(|line| serde_json::from_str::<serde_json::Value>(line).is_err())
+        .count()
+}
+
+fn command_output_with_timeout(
+    command: &mut Command,
+    timeout: StdDuration,
+) -> std::io::Result<std::process::Output> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let start = StdInstant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            if let Some(mut stream) = child.stdout.take() {
+                let _ = std::io::Read::read_to_end(&mut stream, &mut stdout);
+            }
+            if let Some(mut stream) = child.stderr.take() {
+                let _ = std::io::Read::read_to_end(&mut stream, &mut stderr);
+            }
+            return Ok(std::process::Output {
+                status,
+                stdout,
+                stderr,
+            });
+        }
+
+        if start.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("command timed out after {}ms", timeout.as_millis()),
+            ));
+        }
+
+        std::thread::sleep(StdDuration::from_millis(50));
+    }
+}
+
+fn touch(path: &Path) -> Result<()> {
+    OpenOptions::new().create(true).append(true).open(path)?;
+    Ok(())
+}
+
+fn append_jsonl<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    file.lock_exclusive()?;
+    let line = serde_json::to_string(value)?;
+    let write_result = (|| -> Result<()> {
+        writeln!(file, "{line}")?;
+        file.sync_data()?;
+        Ok(())
+    })();
+    let unlock_result = file.unlock().map_err(AnnunimasError::Ledger);
+    write_result?;
+    unlock_result?;
+    Ok(())
+}
+
+fn default_root() -> PathBuf {
+    if let Ok(custom) = std::env::var("ANNUNIMAS_CHARON_HOME") {
+        return PathBuf::from(custom);
+    }
+    PathBuf::from("data/charon")
+}
+
+fn is_permission_error(err: &AnnunimasError) -> bool {
+    matches!(
+        err,
+        AnnunimasError::Ledger(ioe) if ioe.kind() == std::io::ErrorKind::PermissionDenied
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::status::PackageRuntimeSignals;
+    use super::{append_jsonl, CharonService};
+    use crate::service::route_policy::{
+        derive_route_execution_profile, provider_eligible, provider_score,
+        resolve_hybrid_route_policy, select_model, HybridRoutePolicy, LaneFitnessSnapshot,
+        RouteExecutionProfile, RouteSelectionCandidate,
+    };
+    use crate::types::{
+        CharonRequestEnvelope, ModelState, ProviderState, RouteDecision, RouteGovernance,
+        RouteLoveEquationGuard,
+    };
+    use annunimas_plutus::PlutusService;
+    use chrono::Utc;
+    use std::fs;
+    use std::sync::Mutex;
+    use tempfile::tempdir;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[tokio::test]
+    async fn route_selects_provider_and_writes_state() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let dir = tempdir().expect("tempdir");
+        let plutus_home = dir.path().join("plutus");
+        std::env::set_var("ANNUNIMAS_PLUTUS_HOME", &plutus_home);
+        let svc = CharonService::new(dir.path()).expect("service");
+        let req = CharonRequestEnvelope {
+            agent_id: "athena".to_string(),
+            task_type: "code".to_string(),
+            priority: "normal".to_string(),
+            messages: vec![],
+            options: serde_json::json!({}),
+        };
+        let out = svc.route(req).await.expect("route");
+        assert!(!out.provider_id.is_empty());
+        let status = svc.status().await.expect("status");
+        assert!(status.providers_total >= 1);
+        let plutus = PlutusService::from_home(&plutus_home).expect("plutus");
+        let mut total = 0.0;
+        for _ in 0..20 {
+            total = plutus.status().await.expect("plutus status")["joulework"]["total"]
+                .as_f64()
+                .unwrap_or(0.0);
+            if total > 0.0 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        assert!(total > 0.0);
+        std::env::remove_var("ANNUNIMAS_PLUTUS_HOME");
+    }
+
+    #[tokio::test]
+    async fn provider_result_trips_cooldown_after_failures() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let dir = tempdir().expect("tempdir");
+        let svc = CharonService::new(dir.path()).expect("service");
+        svc.mark_provider_result(
+            "local_fallback",
+            false,
+            Some(800),
+            Some("timeout".to_string()),
+        )
+        .await
+        .expect("result1");
+        svc.mark_provider_result(
+            "local_fallback",
+            false,
+            Some(900),
+            Some("timeout".to_string()),
+        )
+        .await
+        .expect("result2");
+        svc.mark_provider_result(
+            "local_fallback",
+            false,
+            Some(950),
+            Some("timeout".to_string()),
+        )
+        .await
+        .expect("result3");
+
+        let providers = svc.providers().await;
+        let local = providers
+            .iter()
+            .find(|p| p.id == "local_fallback")
+            .expect("local provider");
+        assert!(local.in_cooldown);
+        assert!(local.error_count >= 3);
+    }
+
+    #[test]
+    fn credit_limited_402_is_treated_as_fallbackable() {
+        let parsed = serde_json::json!({
+            "error": {
+                "code": 402,
+                "message": "This request requires more credits, or fewer max_tokens. You requested up to 65536 tokens, >
+            }
+        });
+
+        assert!(super::provider_error_should_fallback(402, &parsed));
+    }
+
+    #[test]
+    fn low_cost_orchestrator_prefers_free_context_fit_before_local() {
+        let free = ProviderState {
+            id: "openrouter_free".to_string(),
+            name: "OpenRouter Free".to_string(),
+            base_url: Some("https://openrouter.ai/api/v1".to_string()),
+            enabled: true,
+            healthy: true,
+            api_key_env: Some("OPENROUTER_API_KEY".to_string()),
+            has_api_key: true,
+            models: vec![ModelState {
+                id: "free-ctx".to_string(),
+                capable_tasks: vec![
+                    "code".to_string(),
+                    "research".to_string(),
+                    "reasoning".to_string(),
+                ],
+                context_window: 200_000,
+                is_default: true,
+                healthy: true,
+                in_cooldown: false,
+                cooldown_until_utc: None,
+                consecutive_failures: 0,
+                consecutive_successes: 0,
+                last_error: None,
+                avg_latency_ms: None,
+            }],
+            access_tier: "free_cloud".to_string(),
+            quality_band: "high".to_string(),
+            requests_per_minute: Some(20),
+            requests_per_day: Some(50),
+            requests_used_minute: 0,
+            requests_used_day: 0,
+            active_connections: 0,
+            avg_latency_ms: Some(1800),
+            error_count: 0,
+            last_error: None,
+            in_cooldown: false,
+            cooldown_until_utc: None,
+            minute_window_started_utc: None,
+            day_window_started_utc: None,
+            consecutive_failures: 0,
+            consecutive_successes: 0,
+            last_reservation_utc: None,
+            cooldown_backoff_seconds: 120,
+            intelligence_refreshed_at_utc: None,
+        };
+        let local = ProviderState {
+            id: "edge_hub_3080".to_string(),
+            name: "3080".to_string(),
+            base_url: Some("http://127.0.0.1:1234".to_string()),
+            enabled: true,
+            healthy: true,
+            api_key_env: None,
+            has_api_key: true,
+            models: vec![ModelState {
+                id: "qwen3.5-9b".to_string(),
+                capable_tasks: vec!["code".to_string(), "research".to_string()],
+                context_window: 32_768,
+                is_default: true,
+                healthy: true,
+                in_cooldown: false,
+                cooldown_until_utc: None,
+                consecutive_failures: 0,
+                consecutive_successes: 0,
+                last_error: None,
+                avg_latency_ms: None,
+            }],
+            access_tier: "local".to_string(),
+            quality_band: "high".to_string(),
+            requests_per_minute: Some(60),
+            requests_per_day: None,
+            requests_used_minute: 0,
+            requests_used_day: 0,
+            active_connections: 0,
+            avg_latency_ms: Some(120),
+            error_count: 0,
+            last_error: None,
+            in_cooldown: false,
+            cooldown_until_utc: None,
+            minute_window_started_utc: None,
+            day_window_started_utc: None,
+            consecutive_failures: 0,
+            consecutive_successes: 0,
+            last_reservation_utc: None,
+            cooldown_backoff_seconds: 120,
+            intelligence_refreshed_at_utc: None,
+        };
+        let providers = vec![free, local];
+        let mut candidates = vec![
+            RouteSelectionCandidate {
+                provider_index: 0,
+                model: providers[0].models[0].clone(),
+                score: 100.0,
+            },
+            RouteSelectionCandidate {
+                provider_index: 1,
+                model: providers[1].models[0].clone(),
+                score: 200.0,
+            },
+        ];
+
+        let policy = HybridRoutePolicy {
+            privacy_tier: "internal".to_string(),
+            cost_tier: "low".to_string(),
+            quality_tier: "high".to_string(),
+            origin_preference: "auto".to_string(),
+            latency_sla_ms: None,
+            require_local: false,
+        };
+        let route_profile = RouteExecutionProfile {
+            route_class: "context_heavy".to_string(),
+            execution_lane: "orchestrator".to_string(),
+            context_window_target: 128_000,
+        };
+
+        CharonService::retain_cost_tier_orchestrator_candidates(
+            &mut candidates,
+            &providers,
+            &policy,
+            &route_profile,
+        );
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            providers[candidates[0].provider_index].id,
+            "openrouter_free"
+        );
+    }
+
+    #[test]
+    fn orchestrator_rejects_under_context_local_fallbacks() {
+        let providers = vec![
+            ProviderState {
+                id: "edge_hub_3080".to_string(),
+                name: "edge".to_string(),
+                base_url: Some("http://edge".to_string()),
+                api_key_env: None,
+                access_tier: "local".to_string(),
+                quality_band: "high".to_string(),
+                intelligence_refreshed_at_utc: None,
+                enabled: true,
+                has_api_key: true,
+                healthy: true,
+                in_cooldown: false,
+                cooldown_until_utc: None,
+                cooldown_backoff_seconds: 120,
+                requests_per_minute: None,
+                requests_used_minute: 0,
+                minute_window_started_utc: None,
+                requests_per_day: None,
+                requests_used_day: 0,
+                day_window_started_utc: None,
+                models: vec![ModelState {
+                    id: "qwen3.5-9b".to_string(),
+                    capable_tasks: vec!["code".to_string()],
+                    context_window: 32_768,
+                    is_default: true,
+                    healthy: true,
+                    in_cooldown: false,
+                    cooldown_until_utc: None,
+                    consecutive_failures: 0,
+                    consecutive_successes: 0,
+                    last_error: None,
+                    avg_latency_ms: None,
+                }],
+                error_count: 0,
+                consecutive_failures: 0,
+                consecutive_successes: 0,
+                last_error: None,
+                avg_latency_ms: Some(250),
+                active_connections: 0,
+                last_reservation_utc: None,
+            },
+            ProviderState {
+                id: "edge_guardhouse".to_string(),
+                name: "guardhouse".to_string(),
+                base_url: Some("http://guardhouse".to_string()),
+                api_key_env: None,
+                access_tier: "local".to_string(),
+                quality_band: "low".to_string(),
+                intelligence_refreshed_at_utc: None,
+                enabled: true,
+                has_api_key: true,
+                healthy: true,
+                in_cooldown: false,
+                cooldown_until_utc: None,
+                cooldown_backoff_seconds: 120,
+                requests_per_minute: None,
+                requests_used_minute: 0,
+                minute_window_started_utc: None,
+                requests_per_day: None,
+                requests_used_day: 0,
+                day_window_started_utc: None,
+                models: vec![ModelState {
+                    id: "Qwen3.5-4B-Q4_K_M.gguf".to_string(),
+                    capable_tasks: vec!["code".to_string()],
+                    context_window: 4_096,
+                    is_default: true,
+                    healthy: true,
+                    in_cooldown: false,
+                    cooldown_until_utc: None,
+                    consecutive_failures: 0,
+                    consecutive_successes: 0,
+                    last_error: None,
+                    avg_latency_ms: None,
+                }],
+                error_count: 0,
+                consecutive_failures: 0,
+                consecutive_successes: 0,
+                last_error: None,
+                avg_latency_ms: Some(500),
+                active_connections: 0,
+                last_reservation_utc: None,
+            },
+        ];
+        let req = CharonRequestEnvelope {
+            agent_id: "hermes".to_string(),
+            task_type: "code".to_string(),
+            priority: "normal".to_string(),
+            messages: vec![serde_json::json!({"role":"user","content":"audit config"})],
+            options: serde_json::json!({
+                "workload_role": "orchestrator",
+                "context_priority": "high",
+                "context_window_target": 128_000,
+                "cost_policy": "free_first",
+                "quality_priority": "high",
+                "privacy_requirement": "internal",
+            }),
+        };
+        let priority = "normal".to_string();
+        let policy = resolve_hybrid_route_policy(&req.options);
+        let route_profile = derive_route_execution_profile(&req, &priority);
+        let package_runtime = PackageRuntimeSignals {
+            generated_at_utc: Utc::now().to_rfc3339(),
+            llmfit_backend: "optional_signal_absent".to_string(),
+            llmfit_recommendation_count: 0,
+            llmfit_local_max_params_b: None,
+            llmfit_top_model_names: vec![],
+            nanoclaw_binary_present: false,
+            nanoclaw_runtime_ready: false,
+            nanoclaw_probe_state: "not_configured".to_string(),
+        };
+        let lane_fitness = LaneFitnessSnapshot::default();
+
+        let mut candidates = providers
+            .iter()
+            .enumerate()
+            .filter(|(_, provider)| provider_eligible(provider, &priority, false))
+            .filter_map(|(idx, provider)| {
+                let model = select_model(&provider.models, &req.task_type, None)?;
+                Some(RouteSelectionCandidate {
+                    provider_index: idx,
+                    model: model.clone(),
+                    score: provider_score(
+                        provider,
+                        &model,
+                        &priority,
+                        &policy,
+                        &route_profile,
+                        &package_runtime,
+                        &lane_fitness,
+                    ),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        CharonService::retain_orchestrator_context_fit_candidates(&mut candidates, &route_profile);
+
+        assert!(candidates.is_empty());
+    }
+
+    #[test]
+    fn generic_402_is_not_treated_as_fallbackable() {
+        let parsed = serde_json::json!({
+            "error": {
+                "code": 402,
+                "message": "payment required"
+            }
+        });
+
+        assert!(!super::provider_error_should_fallback(402, &parsed));
+    }
+
+    #[test]
+    fn mesh_provider_with_healthy_alternate_model_stays_routable() {
+        let provider = ProviderState {
+            id: "mesh_local".to_string(),
+            name: "Mesh".to_string(),
+            base_url: Some("http://127.0.0.1:9337/v1".to_string()),
+            api_key_env: None,
+            access_tier: "local".to_string(),
+            quality_band: "high".to_string(),
+            intelligence_refreshed_at_utc: None,
+            enabled: true,
+            has_api_key: true,
+            healthy: true,
+            in_cooldown: false,
+            cooldown_until_utc: None,
+            cooldown_backoff_seconds: 120,
+            requests_per_minute: None,
+            requests_used_minute: 0,
+            minute_window_started_utc: None,
+            requests_per_day: None,
+            requests_used_day: 0,
+            day_window_started_utc: None,
+            models: vec![
+                ModelState {
+                    id: "MiniMax-M2.5-Q4_K_M".to_string(),
+                    capable_tasks: vec!["code".to_string(), "research".to_string()],
+                    context_window: 200_000,
+                    is_default: false,
+                    healthy: false,
+                    in_cooldown: true,
+                    cooldown_until_utc: Some(Utc::now().to_rfc3339()),
+                    consecutive_failures: 1,
+                    consecutive_successes: 0,
+                    last_error: Some("timeout".to_string()),
+                    avg_latency_ms: Some(30_000),
+                },
+                ModelState {
+                    id: "Qwen3-8B-Q4_K_M".to_string(),
+                    capable_tasks: vec!["code".to_string(), "research".to_string()],
+                    context_window: 131_072,
+                    is_default: true,
+                    healthy: true,
+                    in_cooldown: false,
+                    cooldown_until_utc: None,
+                    consecutive_failures: 0,
+                    consecutive_successes: 2,
+                    last_error: None,
+                    avg_latency_ms: Some(1_500),
+                },
+            ],
+            error_count: 0,
+            consecutive_failures: 0,
+            consecutive_successes: 0,
+            last_error: None,
+            avg_latency_ms: None,
+            active_connections: 0,
+            last_reservation_utc: None,
+        };
+
+        assert!(super::provider_has_alternate_routable_model(
+            &provider,
+            "MiniMax-M2.5-Q4_K_M",
+            "code",
+        ));
+    }
+
+    #[test]
+    fn mesh_tunnel_error_is_treated_as_fallbackable() {
+        let parsed = serde_json::json!({
+            "error": {
+                "message": "all 1 tunnel(s) to hosts for None failed (mesh request)"
+            }
+        });
+
+        assert!(super::provider_error_should_fallback(400, &parsed));
+    }
+
+    #[test]
+    fn context_overflow_400_is_treated_as_fallbackable() {
+        let parsed = serde_json::json!({
+            "error": {
+                "code": 400,
+                "message": "request (18870 tokens) exceeds the available context size (16384 tokens)"
+            }
+        });
+
+        assert!(super::provider_error_should_fallback(400, &parsed));
+    }
+
+    #[test]
+    fn proxy_attempts_scale_with_provider_pool() {
+        assert_eq!(super::proxy_max_attempts(1), 3);
+        assert_eq!(super::proxy_max_attempts(4), 4);
+        assert_eq!(super::proxy_max_attempts(20), 8);
+    }
+
+    #[test]
+    fn local_transport_failure_triggers_cooldown() {
+        assert!(super::transport_failure_should_trigger_cooldown(
+            "local_fallback",
+            "proxy request failed to local_fallback: error sending request for url (http://127.0.0.1:11434/v1/chat/comp>
+        ));
+        assert!(super::transport_failure_should_trigger_cooldown(
+            "mesh_local",
+            "proxy request failed to mesh_local: connection refused",
+        ));
+        assert!(super::transport_failure_should_trigger_cooldown(
+            "mesh_local",
+            "provider mesh_local HTTP 400: {\"error\":{\"message\":\"all 1 tunnel(s) to hosts for None failed (mesh req>
+        ));
+        assert!(!super::transport_failure_should_trigger_cooldown(
+            "openrouter_free",
+            "provider openrouter_free HTTP 429",
+        ));
+    }
+
+    #[test]
+    fn local_orchestrator_timeout_is_shorter_than_cloud_default() {
+        assert_eq!(
+            super::proxy_timeout_for_provider("mesh_local", "orchestrator"),
+            std::time::Duration::from_secs(30)
+        );
+        assert_eq!(
+            super::proxy_timeout_for_provider("edge_hub_3080", "execution"),
+            std::time::Duration::from_secs(20)
+        );
+        assert_eq!(
+            super::proxy_timeout_for_provider("openrouter", "orchestrator"),
+            std::time::Duration::from_secs(45)
+        );
+    }
+
+    #[test]
+    fn cloud_429_triggers_immediate_provider_cooldown() {
+        let parsed = serde_json::json!({
+            "error": {
+                "message": "rate limited"
+            }
+        });
+
+        assert_eq!(
+            super::provider_error_immediate_cooldown_seconds("openrouter_free", 429, &parsed),
+            Some(300)
+        );
+        assert_eq!(
+            super::provider_error_immediate_cooldown_seconds("mesh_local", 429, &parsed),
+            None
+        );
+    }
+
+    #[test]
+    fn credit_limited_402_triggers_immediate_provider_cooldown() {
+        let parsed = serde_json::json!({
+            "error": {
+                "code": 402,
+                "message": "This request requires more credits, or fewer max_tokens."
+            }
+        });
+
+        assert_eq!(
+            super::provider_error_immediate_cooldown_seconds("openrouter", 402, &parsed),
+            Some(900)
+        );
+    }
+
+    #[test]
+    fn slim_local_attempt_body_trims_prompt_and_tool_schema() {
+        let mut body = serde_json::json!({
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "A".repeat(12000),
+                },
+                {
+                    "role": "user",
+                    "content": "hello"
+                }
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "description": "B".repeat(400),
+                        "parameters": {
+                            "type": "object",
+                            "description": "outer",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "description": "full path"
+                                }
+                            },
+                            "required": ["path"]
+                        }
+                    }
+                }
+            ]
+        });
+
+        super::slim_local_attempt_body(&mut body);
+
+        let system = body["messages"][0]["content"]
+            .as_str()
+            .expect("system text");
+        assert!(system.len() < 9000);
+        assert!(system.contains("trimmed oversized prompt"));
+
+        let description = body["tools"][0]["function"]["description"]
+            .as_str()
+            .expect("tool description");
+        assert!(description.len() <= 180);
+        assert!(body["tools"][0]["function"]["parameters"]["description"].is_null());
+        assert!(
+            body["tools"][0]["function"]["parameters"]["properties"]["path"]["description"]
+                .is_null()
+        );
+    }
+
+    #[test]
+    fn slim_local_attempt_body_flattens_tool_history() {
+        let mut body = serde_json::json!({
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": "I am checking files.",
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {
+                                "name": "read_file",
+                                "arguments": "{\"path\":\"/tmp/x\"}"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": "line1\nline2\nline3"
+                }
+            ]
+        });
+
+        super::slim_local_attempt_body(&mut body);
+
+        assert!(body["messages"][0]["tool_calls"].is_null());
+        assert!(body["messages"][0]["content"]
+            .as_str()
+            .expect("assistant content")
+            .contains("Tool calls issued: read_file"));
+        assert_eq!(body["messages"][1]["role"].as_str(), Some("user"));
+        assert!(body["messages"][1]["content"]
+            .as_str()
+            .expect("tool content")
+            .contains("[Tool result for call_1]"));
+    }
+
+    #[tokio::test]
+    async fn restricted_privacy_prefers_local_provider() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let dir = tempdir().expect("tempdir");
+        let svc = CharonService::new(dir.path()).expect("service");
+        let req = CharonRequestEnvelope {
+            agent_id: "athena".to_string(),
+            task_type: "chat".to_string(),
+            priority: "normal".to_string(),
+            messages: vec![],
+            options: serde_json::json!({
+                "privacy_tier": "restricted"
+            }),
+        };
+        let out = svc.route(req).await.expect("route");
+        assert_eq!(out.provider_id, "local_fallback");
+        assert_eq!(out.execution_lane, "interactive");
+    }
+
+    #[tokio::test]
+    async fn cloud_preference_can_select_cloud_provider() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        std::env::set_var("GROQ_API_KEY", "test-key");
+        let dir = tempdir().expect("tempdir");
+        let svc = CharonService::new(dir.path()).expect("service");
+        let req = CharonRequestEnvelope {
+            agent_id: "athena".to_string(),
+            task_type: "chat".to_string(),
+            priority: "normal".to_string(),
+            messages: vec![],
+            options: serde_json::json!({
+                "inference_origin": "cloud",
+                "privacy_tier": "public",
+                "quality_tier": "high"
+            }),
+        };
+        let out = svc.route(req).await.expect("route");
+        assert_ne!(out.provider_id, "local_fallback");
+    }
+
+    #[tokio::test]
+    async fn code_routes_expose_execution_lane_and_context_target() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let dir = tempdir().expect("tempdir");
+        let svc = CharonService::new(dir.path()).expect("service");
+        let req = CharonRequestEnvelope {
+            agent_id: "apollo".to_string(),
+            task_type: "code".to_string(),
+            priority: "high".to_string(),
+            messages: vec![],
+            options: serde_json::json!({
+                "tools": [{"name":"shell"}],
+                "tool_choice": "auto"
+            }),
+        };
+        let out = svc.route(req).await.expect("route");
+        assert_eq!(out.execution_lane, "execution");
+        assert_eq!(out.route_class, "tool_oriented");
+        assert_eq!(out.context_window_target, 32_000);
+    }
+
+    #[tokio::test]
+    async fn status_reports_malformed_state_events() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let dir = tempdir().expect("tempdir");
+        let cache_path = dir.path().join("runtime_build_cache.json");
+        fs::write(
+            &cache_path,
+            serde_json::json!({
+                "generated_at_utc": "2026-03-11T00:00:00Z",
+                "authority": "test",
+                "build_root": "/tmp/annunimas-build",
+                "target_dir": "/tmp/annunimas-build/target",
+                "observed_bytes": 123,
+                "target_bytes": 100,
+                "removed_bytes": 23,
+                "status": "ok"
+            })
+            .to_string(),
+        )
+        .expect("cache write");
+        std::env::set_var("ANNUNIMAS_RUNTIME_BUILD_CACHE_STATE_PATH", &cache_path);
+        std::env::set_var("ANNUNIMAS_RUNTIME_BUILD_CACHE_AUTORUN", "0");
+        let svc = CharonService::new(dir.path()).expect("service");
+        fs::write(
+            dir.path().join("state.jsonl"),
+            "{\"ts\":\"2026-03-10T00:00:00Z\",\"event\":\"route_selected\",\"payload\":{\"provider_id\":\"local_fallbac>
+        )
+        .expect("state write");
+        let status = svc.status().await.expect("status");
+        assert_eq!(status.malformed_state_events, 1);
+        assert_eq!(status.recent_route_successes, 1);
+        assert_eq!(status.recent_route_failures, 1);
+        assert_eq!(status.recent_local_fallback_routes, 1);
+        assert!(!status.llmfit_backend.is_empty());
+        assert!(!status.nanoclaw_probe_state.is_empty());
+        assert_eq!(status.runtime_build_cache_status, "ok");
+        assert_eq!(status.runtime_build_cache_observed_bytes, 123);
+        assert_eq!(status.runtime_build_cache_removed_bytes, 23);
+        std::env::remove_var("ANNUNIMAS_RUNTIME_BUILD_CACHE_STATE_PATH");
+        std::env::remove_var("ANNUNIMAS_RUNTIME_BUILD_CACHE_AUTORUN");
+    }
+
+    #[test]
+    fn append_jsonl_serializes_concurrent_state_writers() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("state.jsonl");
+        let mut threads = Vec::new();
+        for idx in 0..12 {
+            let path = path.clone();
+            threads.push(std::thread::spawn(move || {
+                append_jsonl(&path, &serde_json::json!({"idx": idx})).expect("append");
+            }));
+        }
+        for thread in threads {
+            thread.join().expect("thread join");
+        }
+        let content = fs::read_to_string(&path).expect("read");
+        let lines = content
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count();
+        assert_eq!(lines, 12);
+        for line in content.lines().filter(|line| !line.trim().is_empty()) {
+            serde_json::from_str::<serde_json::Value>(line).expect("valid json");
+        }
+    }
+
+    #[test]
+    fn parses_model_size_hints_from_model_ids() {
+        assert_eq!(
+            super::route_policy::parse_model_params_billions("qwen2.5-coder:3b"),
+            Some(3.0)
+        );
+        assert_eq!(
+            super::route_policy::parse_model_params_billions("qwen3-30b-a3b-reasoning"),
+            Some(30.0)
+        );
+        assert_eq!(
+            super::route_policy::parse_model_params_billions("gemini-2.0-flash"),
+            None
+        );
+    }
+
+    #[test]
+    fn configured_provider_pool_preserves_default_fallbacks() {
+        let configured = vec![super::ProviderState {
+            id: "edge_worker".to_string(),
+            name: "Configured Worker".to_string(),
+            base_url: Some("http://100.103.125.88:1234/v1".to_string()),
+            api_key_env: None,
+            access_tier: "local".to_string(),
+            quality_band: "medium".to_string(),
+            intelligence_refreshed_at_utc: None,
+            enabled: true,
+            has_api_key: true,
+            healthy: true,
+            in_cooldown: false,
+            cooldown_until_utc: None,
+            cooldown_backoff_seconds: 120,
+            requests_per_minute: Some(60),
+            requests_used_minute: 0,
+            minute_window_started_utc: None,
+            requests_per_day: None,
+            requests_used_day: 0,
+            day_window_started_utc: None,
+            models: vec![ModelState {
+                id: "qwen3.5-9b".to_string(),
+                capable_tasks: vec!["chat".to_string()],
+                context_window: 32768,
+                is_default: true,
+                healthy: true,
+                in_cooldown: false,
+                cooldown_until_utc: None,
+                consecutive_failures: 0,
+                consecutive_successes: 0,
+                last_error: None,
+                avg_latency_ms: None,
+            }],
+            error_count: 0,
+            consecutive_failures: 0,
+            consecutive_successes: 0,
+            last_error: None,
+            avg_latency_ms: None,
+            active_connections: 0,
+            last_reservation_utc: None,
+        }];
+
+        let merged = super::bootstrap::merge_with_default_providers(configured);
+        let ids = merged
+            .iter()
+            .map(|provider| provider.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(ids.contains(&"edge_worker"));
+        assert!(ids.contains(&"groq"));
+        assert!(ids.contains(&"google"));
+        assert_eq!(
+            ids.iter()
+                .filter(|provider_id| **provider_id == "edge_worker")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn stale_fleet_bootstrap_does_not_override_provider_health() {
+        let bootstrap = super::bootstrap::FleetBootstrapFile {
+            generated_at_utc: Some("2026-03-20T00:00:00Z".to_string()),
+            targets: Vec::new(),
+        };
+        std::env::set_var("ANNUNIMAS_FLEET_BOOTSTRAP_MAX_AGE_SECONDS", "60");
+        assert!(!super::bootstrap::fleet_bootstrap_is_fresh(&bootstrap));
+        std::env::remove_var("ANNUNIMAS_FLEET_BOOTSTRAP_MAX_AGE_SECONDS");
+    }
+
+    #[test]
+    fn attach_charon_route_metadata_stamps_response_payload() {
+        let mut response = serde_json::json!({"id":"chatcmpl-test","choices":[]});
+        let decision = RouteDecision {
+            provider_id: "mesh_local".to_string(),
+            model_id: "MiniMax-M2.5-Q4_K_M".to_string(),
+            reason: "test".to_string(),
+            route_class: "context_heavy".to_string(),
+            execution_lane: "orchestrator".to_string(),
+            context_window_target: 128_000,
+            governance: RouteGovernance {
+                triad_passed: true,
+                triad_aurelius_score: 1.0,
+                triad_bacon_score: 1.0,
+                triad_sun_tzu_score: 1.0,
+                love_equation_guard: RouteLoveEquationGuard {
+                    resonance: 1.0,
+                    attention: 1.0,
+                    reciprocity: 1.0,
+                    score: 1.0,
+                },
+            },
+        };
+
+        super::attach_charon_route_metadata(&mut response, &decision, "mesh_local", 42);
+
+        let route = response
+            .get("_charon_route")
+            .and_then(|value| value.as_object())
+            .expect("route");
+        assert_eq!(
+            route.get("provider_id").and_then(|value| value.as_str()),
+            Some("mesh_local")
+        );
+        assert_eq!(
+            route.get("model_id").and_then(|value| value.as_str()),
+            Some("MiniMax-M2.5-Q4_K_M")
+        );
+        assert_eq!(
+            route.get("latency_ms").and_then(|value| value.as_u64()),
+            Some(42)
+        );
+    }
+}
