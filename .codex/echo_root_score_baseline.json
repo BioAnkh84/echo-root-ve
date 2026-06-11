@@ -1,0 +1,81 @@
+{
+  "baseline_version": "2026-06-codex-r1",
+  "purpose": "Initial Codex/Echo Root scoring baseline derived from lessons learned and operator interaction.",
+  "doctrine": [
+    "Presence is not proof.",
+    "Passing check raises rho.",
+    "Unexpected authority raises delta.",
+    "Human correction lowers future overconfidence.",
+    "Repeated clean replay earns trust slowly.",
+    "Hook receipts do not replace human approval."
+  ],
+  "score_meaning": {
+    "rho": "Evidence strength and confidence in the current posture.",
+    "delta": "Drift, risk, or authority change from the expected safe workflow."
+  },
+  "event_defaults": {
+    "SessionStart": {
+      "rho": 0.76,
+      "delta": 0.12,
+      "confidence": "high",
+      "action_lane": "L1_READ_CLASSIFY",
+      "why": "Repo map provides orientation only; it is useful but not proof of health."
+    },
+    "PreToolUse": {
+      "rho": 0.72,
+      "delta": 0.16,
+      "confidence": "medium",
+      "action_lane": "L2_WRITE_ANNOTATE_INDEX",
+      "why": "Tool use should start in inspection posture until action scope is clear."
+    },
+    "PermissionRequest": {
+      "rho": 0.65,
+      "delta": 0.25,
+      "confidence": "medium",
+      "action_lane": "L2_WRITE_ANNOTATE_INDEX",
+      "why": "Permission requests indicate authority or sandbox posture has changed."
+    },
+    "PostToolUse": {
+      "rho": 0.78,
+      "delta": 0.14,
+      "confidence": "high",
+      "action_lane": "L1_READ_CLASSIFY",
+      "why": "Post-action receipts are stronger when chain validation and command completion are available."
+    },
+    "Stop": {
+      "rho": 0.8,
+      "delta": 0.1,
+      "confidence": "high",
+      "action_lane": "L1_READ_CLASSIFY",
+      "why": "Closeout posture is strong when receipts and tests stayed clean."
+    }
+  },
+  "modifiers": {
+    "dirty_worktree_delta_add": 0.04,
+    "destructive_delta_floor": 0.41,
+    "destructive_action_lane": "L3_REMOVE_DELETE_RESTRUCTURE",
+    "destructive_terms": [
+      "delete",
+      "remove-item",
+      "git reset",
+      "rm -rf",
+      "del /s"
+    ]
+  },
+  "feedback_questions": [
+    "Was the action expected?",
+    "Did it touch the files you thought it would?",
+    "Did the explanation match what actually happened?",
+    "Did Codex pause too much or not enough?",
+    "Was the receipt useful afterward?",
+    "Did any green status rely on existence instead of proof?"
+  ],
+  "human_feedback_effects": {
+    "unexpected_action": "increase delta for similar future actions",
+    "wrong_files_touched": "increase delta and lower rho until scope evidence improves",
+    "explanation_mismatch": "lower rho for similar claims",
+    "paused_too_much": "lower delta for repeated clean patterns with matching receipts",
+    "paused_not_enough": "raise default delta for that event class",
+    "receipt_not_useful": "revise receipt fields before raising trust"
+  }
+}

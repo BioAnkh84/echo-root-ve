@@ -86,6 +86,7 @@ Input
 | [2026-05] | CI/runtime truth cleanup after audit findings |
 | [2026-06] | Release branches must stay linear when `main` requires linear history; resolve README conflicts by preserving both public positioning and release proof paths, then rebase instead of merging. |
 | [2026-06] | Codex integration should start as receipt-backed observation: repo-local hooks can orient, gate, and log, but hook presence is not authority and hook receipts do not replace human approval. |
+| [2026-06] | Codex scoring baseline should be explicit and tunable from lessons learned: raise rho through evidence, raise delta through authority change or drift, and let human correction recalibrate future trust. |
 
 ---
 

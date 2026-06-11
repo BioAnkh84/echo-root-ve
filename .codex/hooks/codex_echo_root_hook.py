@@ -22,6 +22,7 @@ from repo_map import DEFAULT_EXCLUDES, build_repo_map, build_snapshot, write_sna
 RUNTIME_DIR = Path(os.environ.get("ECHO_ROOT_CODEX_HOOK_DIR", REPO_ROOT / "ve_data" / "codex_hooks"))
 LEDGER = RUNTIME_DIR / "codex_hook_receipts.jsonl"
 REPO_MAP_SNAPSHOT = RUNTIME_DIR / "repo_map_latest.json"
+BASELINE_PATH = Path(os.environ.get("ECHO_ROOT_SCORE_BASELINE", REPO_ROOT / ".codex" / "echo_root_score_baseline.json"))
 
 
 def _utc_now() -> str:
@@ -48,6 +49,43 @@ def _git(args: list[str]) -> str:
         return ""
 
 
+def _load_score_baseline() -> dict[str, Any]:
+    try:
+        return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {
+            "baseline_version": "fallback",
+            "event_defaults": {},
+            "modifiers": {},
+            "doctrine": ["Presence is not proof."],
+        }
+
+
+def _score_for_event(event: str, command: Any, dirty: bool) -> dict[str, Any]:
+    baseline = _load_score_baseline()
+    defaults = baseline.get("event_defaults", {})
+    modifiers = baseline.get("modifiers", {})
+    score = dict(defaults.get(event, defaults.get("PreToolUse", {})))
+    score.setdefault("rho", 0.72)
+    score.setdefault("delta", 0.16)
+    score.setdefault("confidence", "medium")
+    score.setdefault("action_lane", "L2_WRITE_ANNOTATE_INDEX")
+
+    if dirty:
+        score["delta"] = round(float(score["delta"]) + float(modifiers.get("dirty_worktree_delta_add", 0.04)), 3)
+
+    command_text = str(command).lower()
+    destructive_terms = [str(item).lower() for item in modifiers.get("destructive_terms", [])]
+    if any(term and term in command_text for term in destructive_terms):
+        score["action_lane"] = modifiers.get("destructive_action_lane", "L3_REMOVE_DELETE_RESTRUCTURE")
+        score["delta"] = max(float(score["delta"]), float(modifiers.get("destructive_delta_floor", 0.41)))
+        score["confidence"] = "medium"
+
+    score["baseline_version"] = baseline.get("baseline_version", "unknown")
+    score["doctrine"] = baseline.get("doctrine", [])[:4]
+    return score
+
+
 def _event_request(event: str, payload: dict[str, Any]) -> dict[str, Any]:
     tool_name = str(payload.get("tool_name") or payload.get("tool") or payload.get("name") or event)
     command = payload.get("command") or payload.get("args") or payload.get("input") or payload.get("stdin_text") or ""
@@ -58,20 +96,7 @@ def _event_request(event: str, payload: dict[str, Any]) -> dict[str, Any]:
     branch = _git(["branch", "--show-current"]) or "unknown"
     status = _git(["status", "--porcelain"])
     dirty = bool(status)
-    event_lower = event.lower()
-    action_lane = "L1_READ_CLASSIFY"
-    rho = 0.76
-    delta = 0.12
-    confidence = "high"
-
-    if event_lower in {"pretooluse", "permissionrequest"}:
-        action_lane = "L2_WRITE_ANNOTATE_INDEX"
-        rho = 0.72
-        delta = 0.20 if dirty else 0.16
-        confidence = "medium"
-    if "delete" in str(command).lower() or "remove-item" in str(command).lower() or "git reset" in str(command).lower():
-        action_lane = "L3_REMOVE_DELETE_RESTRUCTURE"
-        delta = 0.41
+    score = _score_for_event(event, command, dirty)
 
     return {
         "actor_id": os.environ.get("USERNAME") or os.environ.get("USER") or "operator",
@@ -79,13 +104,13 @@ def _event_request(event: str, payload: dict[str, Any]) -> dict[str, Any]:
         "model_id": os.environ.get("CODEX_MODEL", "codex"),
         "provider_id": "openai-codex",
         "route_id": f"codex-hook:{event}:{branch}",
-        "action_lane": action_lane,
+        "action_lane": score["action_lane"],
         "requested_action": requested_action,
         "consent_scope_present": True,
-        "rho": rho,
-        "delta": delta,
+        "rho": score["rho"],
+        "delta": score["delta"],
         "dry_run": True,
-        "confidence": confidence,
+        "confidence": score["confidence"],
         "fallback_status": "none",
         "tool_name": tool_name,
         "files_touched": [],
@@ -94,6 +119,8 @@ def _event_request(event: str, payload: dict[str, Any]) -> dict[str, Any]:
             "branch": branch,
             "dirty": dirty,
             "payload_keys": sorted(payload.keys()),
+            "score_baseline_version": score["baseline_version"],
+            "score_doctrine": score["doctrine"],
         },
     }
 

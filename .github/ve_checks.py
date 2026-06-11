@@ -38,6 +38,7 @@ REQUIRED_FILES = [
     "docs/CODEX_ECHO_ROOT_HOOKS.md",
     "docs/REPO_MAP_RECEIPTS.md",
     ".codex/hooks.json",
+    ".codex/echo_root_score_baseline.json",
     ".codex/hooks/codex_echo_root_hook.py",
     "schemas/echo_root_receipt.schema.json",
     "echo_root_receipt.py",

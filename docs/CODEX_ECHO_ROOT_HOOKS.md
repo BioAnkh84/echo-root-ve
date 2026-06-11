@@ -17,6 +17,15 @@ ve_data/codex_hooks/
 Those files are ignored by git. They are local evidence, not public release
 artifacts.
 
+The hook score baseline lives at:
+
+```text
+.codex/echo_root_score_baseline.json
+```
+
+That file defines the starting `rho`, `delta`, confidence, and action lane for
+each Codex hook event.
+
 ## What The Hooks Do
 
 `SessionStart`
@@ -71,3 +80,22 @@ Receipts improve reviewability, but they are not permission. If a receipt says
 `PAUSE`, the operator should inspect the reason before continuing. If a receipt
 says `ABORT` or `SAFE_MODE`, the operator should treat the workflow as needing
 human review.
+
+## Score Baseline
+
+The first baseline is intentionally conservative:
+
+- `SessionStart` starts as orientation, not proof.
+- `PreToolUse` starts in a PAUSE-prone inspection posture.
+- `PermissionRequest` starts with higher drift because authority changed.
+- `PostToolUse` can score stronger when receipts and command results exist.
+- `Stop` can score strongest when tests and receipts stayed clean.
+
+Tune scores from evidence:
+
+- Raise `rho` after passing tests, verified receipts, hash checks, replay, or
+  explicit human confirmation.
+- Raise `delta` after escalation, destructive intent, stale context, dirty
+  worktree, fallback, branch mismatch, or unclear scope.
+- Lower future confidence when human review finds an explanation mismatch.
+- Let repeated clean replay earn trust slowly.

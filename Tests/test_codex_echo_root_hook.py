@@ -11,6 +11,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / ".codex" / "hooks" / "codex_echo_root_hook.py"
+BASELINE = REPO / ".codex" / "echo_root_score_baseline.json"
 
 
 class CodexEchoRootHookTests(unittest.TestCase):
@@ -45,6 +46,13 @@ class CodexEchoRootHookTests(unittest.TestCase):
             self.assertEqual(rows[-1]["event"], "PreToolUse")
             self.assertEqual(rows[-1]["decision"], "PAUSE")
             self.assertIn("confidence medium/unclear", rows[-1]["reason"])
+
+    def test_score_baseline_records_lessons_learned(self) -> None:
+        baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+
+        self.assertIn("Presence is not proof.", baseline["doctrine"])
+        self.assertEqual(baseline["event_defaults"]["PermissionRequest"]["delta"], 0.25)
+        self.assertIn("Was the action expected?", baseline["feedback_questions"])
 
 
 if __name__ == "__main__":
