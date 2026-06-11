@@ -17,12 +17,16 @@ SELFTEST = REPO / ".codex" / "hooks" / "codex_echo_root_selftest.py"
 
 class CodexEchoRootHookTests(unittest.TestCase):
     def run_hook(self, event: str, runtime_dir: Path) -> list[dict]:
+        return self.run_hook_with_payload(event, runtime_dir, {})
+
+    def run_hook_with_payload(self, event: str, runtime_dir: Path, payload: dict) -> list[dict]:
         env = dict(os.environ)
         env["ECHO_ROOT_CODEX_HOOK_DIR"] = str(runtime_dir)
         proc = subprocess.run(
             [sys.executable, str(HOOK), event],
             cwd=REPO,
             env=env,
+            input=json.dumps(payload),
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -58,6 +62,24 @@ class CodexEchoRootHookTests(unittest.TestCase):
             self.assertIn("delta=", calibration["delta"])
             self.assertIsInstance(calibration["difference_makers"], list)
 
+    def test_nested_codex_payload_shape_is_understood(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            runtime_dir = Path(temp)
+            rows = self.run_hook_with_payload(
+                "PreToolUse",
+                runtime_dir,
+                {
+                    "recipient_name": "functions.shell_command",
+                    "parameters": {"command": "git reset --hard HEAD"},
+                },
+            )
+            receipts = self.read_ledger(runtime_dir)
+
+            self.assertEqual(rows[-1]["decision"], "ABORT")
+            self.assertIn("destructive_command", receipts[-1]["calibration_reason"]["difference_makers"])
+            self.assertIn("payload_shape_hash", receipts[-1]["hook_metadata"])
+            self.assertEqual(receipts[-1]["hook_metadata"]["tool_name_extracted"], "functions.shell_command")
+
     def test_score_baseline_records_lessons_learned(self) -> None:
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
 
@@ -79,7 +101,8 @@ class CodexEchoRootHookTests(unittest.TestCase):
 
         self.assertEqual(report["permission_request_decision"], "PAUSE")
         self.assertEqual(report["destructive_pretool_decision"], "ABORT")
-        self.assertEqual(report["calibration_reason_coverage"], "6/6")
+        self.assertEqual(report["nested_payload_decision"], "PAUSE")
+        self.assertEqual(report["calibration_reason_coverage"], "7/7")
         self.assertIn("permission_request", report["difference_makers_caught"])
         self.assertIn("destructive_command", report["difference_makers_caught"])
 

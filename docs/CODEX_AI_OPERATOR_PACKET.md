@@ -78,6 +78,13 @@ A useful AI receipt should answer:
 - Why did `rho` and `delta` land there?
 - Can the decision be replayed?
 
+## Hook Payload Privacy
+
+Hook receipts should prefer payload shape and hashes over raw payload dumps.
+Raw commands may appear in `requested_action` for review, but full runtime
+payloads should not be copied into public docs or commits. If runtime hook
+metadata changes, update extraction tests before trusting new score behavior.
+
 ## Self-Review Question
 
 After a task, ask:

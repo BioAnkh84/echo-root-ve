@@ -67,10 +67,10 @@ py -3.11 .codex/hooks/codex_echo_root_selftest.py
 ```
 
 The self-test simulates session start, pre-tool checks, permission request,
-destructive command posture, post-tool receipt, and closeout. It should show
-that permission requests become `PAUSE`, destructive command posture becomes
-`ABORT`, calibration reasons are attached, and lifecycle events become
-hash-chained receipts.
+alternate Codex payload shapes, destructive command posture, post-tool
+receipt, and closeout. It should show that permission requests become `PAUSE`,
+destructive command posture becomes `ABORT`, calibration reasons are attached,
+and lifecycle events become hash-chained receipts.
 
 ## What The Hooks Do Not Do
 

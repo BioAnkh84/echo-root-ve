@@ -42,6 +42,13 @@ def main() -> int:
             ("SessionStart", {"name": "session orientation"}),
             ("PreToolUse", {"tool_name": "Bash", "command": "py -3.11 -m unittest discover -s Tests"}),
             ("PermissionRequest", {"tool_name": "Bash", "command": "git push origin codex/echo-root-hooks"}),
+            (
+                "PreToolUse",
+                {
+                    "recipient_name": "functions.shell_command",
+                    "parameters": {"command": "py -3.11 .github\\ve_checks.py"},
+                },
+            ),
             ("PreToolUse", {"tool_name": "Bash", "command": "git reset --hard HEAD"}),
             ("PostToolUse", {"tool_name": "Bash", "command": "py -3.11 .github\\ve_checks.py"}),
             ("Stop", {"name": "turn closeout"}),
@@ -69,7 +76,8 @@ def main() -> int:
             "receipts_written": len(receipts),
             "decisions": decisions,
             "permission_request_decision": receipts[2]["decision"],
-            "destructive_pretool_decision": receipts[3]["decision"],
+            "nested_payload_decision": receipts[3]["decision"],
+            "destructive_pretool_decision": receipts[4]["decision"],
             "calibration_reason_coverage": f"{calibration_count}/{len(receipts)}",
             "difference_makers_caught": difference_makers,
             "repo_map_snapshot_written": orientation_snapshot.exists(),

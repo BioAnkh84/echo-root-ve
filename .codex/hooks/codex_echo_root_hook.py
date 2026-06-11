@@ -49,6 +49,42 @@ def _git(args: list[str]) -> str:
         return ""
 
 
+def _stringify_command(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return " ".join(str(item) for item in value)
+    if isinstance(value, dict):
+        for key in ("command", "cmd", "program", "executable", "script", "input"):
+            if key in value:
+                return _stringify_command(value[key])
+        return json.dumps(value, sort_keys=True, default=str)[:1000]
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _payload_command(payload: dict[str, Any]) -> str:
+    for key in ("command", "cmd", "args", "argv", "input", "stdin_text"):
+        if key in payload:
+            return _stringify_command(payload[key])
+    nested = payload.get("parameters")
+    if isinstance(nested, dict):
+        return _payload_command(nested)
+    return ""
+
+
+def _payload_tool_name(payload: dict[str, Any], fallback: str) -> str:
+    for key in ("tool_name", "tool", "name", "recipient_name"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    nested = payload.get("parameters")
+    if isinstance(nested, dict):
+        return _payload_tool_name(nested, fallback)
+    return fallback
+
+
 def _load_score_baseline() -> dict[str, Any]:
     try:
         return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
@@ -109,11 +145,11 @@ def _score_for_event(event: str, command: Any, dirty: bool) -> dict[str, Any]:
 
 
 def _event_request(event: str, payload: dict[str, Any]) -> dict[str, Any]:
-    tool_name = str(payload.get("tool_name") or payload.get("tool") or payload.get("name") or event)
-    command = payload.get("command") or payload.get("args") or payload.get("input") or payload.get("stdin_text") or ""
+    tool_name = _payload_tool_name(payload, event)
+    command = _payload_command(payload)
     requested_action = f"codex hook {event}"
     if command:
-        requested_action = f"{requested_action}: {str(command)[:220]}"
+        requested_action = f"{requested_action}: {command[:220]}"
 
     branch = _git(["branch", "--show-current"]) or "unknown"
     status = _git(["status", "--porcelain"])
@@ -137,16 +173,38 @@ def _event_request(event: str, payload: dict[str, Any]) -> dict[str, Any]:
         "tool_name": tool_name,
         "files_touched": [],
         "calibration_reason": score["calibration_reason"],
+        "hook_metadata": {
+            "event": event,
+            "payload_keys": sorted(payload.keys()),
+            "payload_shape_hash": _payload_shape_hash(payload),
+            "tool_name_extracted": tool_name,
+            "command_hint_present": bool(command),
+        },
         "input": {
             "event": event,
             "branch": branch,
             "dirty": dirty,
             "payload_keys": sorted(payload.keys()),
+            "payload_shape_hash": _payload_shape_hash(payload),
             "score_baseline_version": score["baseline_version"],
             "score_doctrine": score["doctrine"],
             "difference_makers_caught": score["difference_makers_caught"],
         },
     }
+
+
+def _payload_shape_hash(payload: dict[str, Any]) -> str:
+    def shape(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {key: shape(value[key]) for key in sorted(value)}
+        if isinstance(value, list):
+            return ["list", len(value)]
+        return type(value).__name__
+
+    import hashlib
+
+    body = json.dumps(shape(payload), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def _write_hook_receipt(event: str, payload: dict[str, Any]) -> int:
