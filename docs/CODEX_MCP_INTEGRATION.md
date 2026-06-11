@@ -31,6 +31,15 @@ configuration if prompted. Then ask Codex to list MCP tools or use:
 If the server is active, Codex should see Echo Root tools without needing the
 repo-local lifecycle hooks to fire.
 
+If only built-in Codex project tools appear, the project MCP config has not
+loaded yet. Check:
+
+1. The session is on branch `codex/echo-root-hooks`.
+2. `.codex/config.toml` exists in the repo.
+3. The project config has been reviewed/trusted.
+4. A fresh project session was opened after the config file was added.
+5. The app can run `py -3.11 .codex/mcp/echo_root_mcp.py` from the repo root.
+
 ## Boundary
 
 MCP tools make Echo Root callable. They do not grant authority.
