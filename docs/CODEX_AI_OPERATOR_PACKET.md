@@ -24,7 +24,16 @@ py -3.11 .codex/hooks/codex_echo_root_selftest.py
 py -3.11 .codex/hooks/codex_hook_live_probe.py
 ```
 
-5. Run the release check before claiming readiness:
+5. If lifecycle hooks are unavailable, use the Echo Root MCP tools:
+
+```text
+/mcp
+```
+
+Look for `echo_root_ve` tools such as `echo_root_gate_action` and
+`echo_root_repo_map`.
+
+6. Run the release check before claiming readiness:
 
 ```text
 py -3.11 .github\ve_checks.py

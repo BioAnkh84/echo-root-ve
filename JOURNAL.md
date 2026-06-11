@@ -93,6 +93,7 @@ Input
 | [2026-06] | AI-facing docs should be operational packets, not essays: tell the next model what to read, what to run, what changes rho/delta, and when to pause. |
 | [2026-06] | Hook payload handling should be shape-tolerant and privacy-aware: extract useful command/tool hints, store shape hashes, and avoid raw payload dumps. |
 | [2026-06] | Live hook activation needs its own probe: simulated hook logic can pass while the current Codex session has not loaded or trusted repo-local hooks. |
+| [2026-06] | If lifecycle hooks do not fire in a Codex surface, expose Echo Root as MCP tools so AI can call orientation, gate, receipt, verify, and probe functions directly. |
 
 ---
 
