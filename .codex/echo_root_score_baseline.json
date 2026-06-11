@@ -13,6 +13,74 @@
     "rho": "Evidence strength and confidence in the current posture.",
     "delta": "Drift, risk, or authority change from the expected safe workflow."
   },
+  "difference_makers": {
+    "raises_rho": [
+      {
+        "signal": "repo_map_snapshot",
+        "effect": 0.02,
+        "reason": "orientation snapshot exists, but map is not proof"
+      },
+      {
+        "signal": "verified_hash_chain",
+        "effect": 0.04,
+        "reason": "receipt continuity verified before append"
+      },
+      {
+        "signal": "post_action_check",
+        "effect": 0.05,
+        "reason": "tests or explicit verification followed the action"
+      },
+      {
+        "signal": "human_confirmation",
+        "effect": 0.05,
+        "reason": "operator confirmed the action matched intent"
+      }
+    ],
+    "raises_delta": [
+      {
+        "signal": "permission_request",
+        "effect": 0.09,
+        "reason": "authority boundary changed"
+      },
+      {
+        "signal": "dirty_worktree",
+        "effect": 0.04,
+        "reason": "uncommitted changes increase attribution risk"
+      },
+      {
+        "signal": "destructive_command",
+        "effect": "floor:0.41",
+        "reason": "destructive command text needs L3 review"
+      },
+      {
+        "signal": "missing_scope",
+        "effect": "pause",
+        "reason": "no trusted operation without scope"
+      },
+      {
+        "signal": "provider_or_route_fallback",
+        "effect": "pause_or_safe_mode",
+        "reason": "fallback is not consent"
+      }
+    ],
+    "tunes_future": [
+      {
+        "signal": "unexpected_action",
+        "effect": "raise_delta_for_similar_actions",
+        "reason": "actual behavior drifted from operator expectation"
+      },
+      {
+        "signal": "receipt_not_useful",
+        "effect": "revise_receipt_fields",
+        "reason": "trust cannot rise if evidence is not reviewable"
+      },
+      {
+        "signal": "repeated_clean_replay",
+        "effect": "raise_rho_slowly",
+        "reason": "repeatable proof earns confidence gradually"
+      }
+    ]
+  },
   "event_defaults": {
     "SessionStart": {
       "rho": 0.76,

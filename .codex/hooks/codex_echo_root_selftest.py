@@ -54,6 +54,13 @@ def main() -> int:
         receipts = read_ledger(runtime_dir)
         decisions = [receipt["decision"] for receipt in receipts]
         calibration_count = sum(1 for receipt in receipts if "calibration_reason" in receipt)
+        difference_makers = sorted(
+            {
+                item
+                for receipt in receipts
+                for item in receipt.get("calibration_reason", {}).get("difference_makers", [])
+            }
+        )
         orientation_snapshot = runtime_dir / "repo_map_latest.json"
 
         result = {
@@ -64,12 +71,14 @@ def main() -> int:
             "permission_request_decision": receipts[2]["decision"],
             "destructive_pretool_decision": receipts[3]["decision"],
             "calibration_reason_coverage": f"{calibration_count}/{len(receipts)}",
+            "difference_makers_caught": difference_makers,
             "repo_map_snapshot_written": orientation_snapshot.exists(),
             "made_a_difference": [
                 "lifecycle events became hash-chained receipts",
                 "permission request became PAUSE instead of ordinary flow",
                 "destructive command text became ABORT before execution posture",
                 "each scored event carried a calibration reason",
+                "difference makers were named for later tuning",
                 "session start produced a repo-map orientation snapshot",
             ],
             "remaining_limits": [

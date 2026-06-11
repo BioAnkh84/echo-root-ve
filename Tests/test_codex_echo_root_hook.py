@@ -56,12 +56,14 @@ class CodexEchoRootHookTests(unittest.TestCase):
             calibration = receipts[-1]["calibration_reason"]
             self.assertIn("rho=0.72", calibration["rho"])
             self.assertIn("delta=", calibration["delta"])
+            self.assertIn("dirty_worktree", calibration["difference_makers"])
 
     def test_score_baseline_records_lessons_learned(self) -> None:
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
 
         self.assertIn("Presence is not proof.", baseline["doctrine"])
         self.assertEqual(baseline["event_defaults"]["PermissionRequest"]["delta"], 0.25)
+        self.assertIn("difference_makers", baseline)
         self.assertIn("Was the action expected?", baseline["feedback_questions"])
 
     def test_selftest_reports_codex_workflow_difference(self) -> None:
@@ -78,6 +80,8 @@ class CodexEchoRootHookTests(unittest.TestCase):
         self.assertEqual(report["permission_request_decision"], "PAUSE")
         self.assertEqual(report["destructive_pretool_decision"], "ABORT")
         self.assertEqual(report["calibration_reason_coverage"], "6/6")
+        self.assertIn("permission_request", report["difference_makers_caught"])
+        self.assertIn("destructive_command", report["difference_makers_caught"])
 
 
 if __name__ == "__main__":

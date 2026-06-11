@@ -8,6 +8,12 @@ This repo includes a conservative Codex hook bridge:
 - `.codex/hooks.json`
 - `.codex/hooks/codex_echo_root_hook.py`
 
+For the shortest AI startup sequence, see:
+
+```text
+docs/CODEX_AI_OPERATOR_PACKET.md
+```
+
 The bridge writes local runtime receipts under:
 
 ```text
@@ -118,3 +124,18 @@ Tune scores from evidence:
   worktree, fallback, branch mismatch, or unclear scope.
 - Lower future confidence when human review finds an explanation mismatch.
 - Let repeated clean replay earn trust slowly.
+
+## Difference Makers
+
+The score baseline names the signals that should actually change Codex's
+posture:
+
+- Evidence makers raise `rho`: repo-map snapshot, verified hash chain,
+  post-action checks, and explicit human confirmation.
+- Risk makers raise `delta`: permission requests, dirty worktree, destructive
+  command text, missing scope, and provider or route fallback.
+- Feedback makers tune future runs: unexpected action, weak receipts, and
+  repeated clean replay.
+
+The self-test reports `difference_makers_caught` so we can tell whether Echo
+Root improved the workflow or merely added ceremony.

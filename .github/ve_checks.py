@@ -36,6 +36,7 @@ REQUIRED_FILES = [
     "RELEASE_MANIFEST.md",
     "PUBLIC_RELEASE_SAFETY_SCAN.md",
     "docs/CODEX_ECHO_ROOT_HOOKS.md",
+    "docs/CODEX_AI_OPERATOR_PACKET.md",
     "docs/REPO_MAP_RECEIPTS.md",
     ".codex/hooks.json",
     ".codex/echo_root_score_baseline.json",

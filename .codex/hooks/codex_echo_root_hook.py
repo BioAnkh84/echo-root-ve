@@ -65,6 +65,7 @@ def _score_for_event(event: str, command: Any, dirty: bool) -> dict[str, Any]:
     baseline = _load_score_baseline()
     defaults = baseline.get("event_defaults", {})
     modifiers = baseline.get("modifiers", {})
+    difference_makers = baseline.get("difference_makers", {})
     score = dict(defaults.get(event, defaults.get("PreToolUse", {})))
     score.setdefault("rho", 0.72)
     score.setdefault("delta", 0.16)
@@ -72,10 +73,19 @@ def _score_for_event(event: str, command: Any, dirty: bool) -> dict[str, Any]:
     score.setdefault("action_lane", "L2_WRITE_ANNOTATE_INDEX")
     score.setdefault("why", "No event-specific baseline reason was provided.")
     delta_reasons = [score["why"]]
+    caught_difference_makers: list[str] = []
+
+    if event == "SessionStart":
+        caught_difference_makers.append("repo_map_snapshot")
+    if event == "PermissionRequest":
+        caught_difference_makers.append("permission_request")
+    if event == "PostToolUse":
+        caught_difference_makers.append("post_action_check")
 
     if dirty:
         score["delta"] = round(float(score["delta"]) + float(modifiers.get("dirty_worktree_delta_add", 0.04)), 3)
         delta_reasons.append(str(modifiers.get("dirty_worktree_reason", "delta increased because worktree was dirty")))
+        caught_difference_makers.append("dirty_worktree")
 
     command_text = str(command).lower()
     destructive_terms = [str(item).lower() for item in modifiers.get("destructive_terms", [])]
@@ -84,12 +94,16 @@ def _score_for_event(event: str, command: Any, dirty: bool) -> dict[str, Any]:
         score["delta"] = max(float(score["delta"]), float(modifiers.get("destructive_delta_floor", 0.41)))
         score["confidence"] = "medium"
         delta_reasons.append(str(modifiers.get("destructive_reason", "delta raised because command looked destructive")))
+        caught_difference_makers.append("destructive_command")
 
     score["baseline_version"] = baseline.get("baseline_version", "unknown")
     score["doctrine"] = baseline.get("doctrine", [])[:4]
+    score["difference_makers_caught"] = caught_difference_makers
+    score["difference_maker_rules"] = difference_makers
     score["calibration_reason"] = {
         "rho": f"rho={score['rho']} because {score['why']}",
         "delta": f"delta={score['delta']} because {'; '.join(delta_reasons)}",
+        "difference_makers": caught_difference_makers,
     }
     return score
 
@@ -130,6 +144,7 @@ def _event_request(event: str, payload: dict[str, Any]) -> dict[str, Any]:
             "payload_keys": sorted(payload.keys()),
             "score_baseline_version": score["baseline_version"],
             "score_doctrine": score["doctrine"],
+            "difference_makers_caught": score["difference_makers_caught"],
         },
     }
 
