@@ -40,6 +40,36 @@ loaded yet. Check:
 4. A fresh project session was opened after the config file was added.
 5. The app can run `py -3.11 .codex/mcp/echo_root_mcp.py` from the repo root.
 
+## Current Windows Desktop Finding
+
+On 2026-06-11, Codex Desktop/CLI `0.140.0-alpha.2` could see the
+`echo_root_ve` MCP configuration through `codex mcp get echo_root_ve`, and the
+server passed direct framed initialize tests. However, a live Codex session did
+not expose the `echo_root_*` tools.
+
+Temporary startup tracing showed:
+
+```text
+serve_start
+read_wait
+read_eof
+serve_stop
+```
+
+That means Codex launched the configured process in the correct repo, then
+closed stdin before sending the MCP `initialize` request. Treat this as a live
+transport activation gap, not proof that the Echo Root server tools are invalid.
+
+Until this is resolved in the active Codex surface, use the repo-local commands
+as the fallback proof path:
+
+```text
+py -3.11 repo_map.py --depth 3 --json
+py -3.11 .codex/hooks/codex_echo_root_selftest.py
+py -3.11 .codex/hooks/codex_hook_live_probe.py
+py -3.11 .github\ve_checks.py
+```
+
 ## Personal Plugin Wrapper
 
 If project/global MCP config is visible on disk but not exposed in the live

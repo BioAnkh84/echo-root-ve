@@ -33,6 +33,12 @@ py -3.11 .codex/hooks/codex_hook_live_probe.py
 Look for `echo_root_ve` tools such as `echo_root_gate_action` and
 `echo_root_repo_map`.
 
+If the skill/plugin is installed but the tools are not callable, do not treat
+registration as readiness. On Windows Desktop/CLI `0.140.0-alpha.2`, local
+testing showed the stdio server could be launched but Codex closed stdin before
+sending `initialize`. Fall back to the repo-local commands until live MCP tools
+are visible in the active session.
+
 6. Run the release check before claiming readiness:
 
 ```text

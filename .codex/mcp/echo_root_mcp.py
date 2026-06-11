@@ -19,6 +19,7 @@ from repo_map import DEFAULT_EXCLUDES, build_repo_map, build_snapshot  # noqa: E
 
 SERVER_NAME = "echo-root-ve"
 SERVER_VERSION = "0.1.0"
+DEFAULT_PROTOCOL_VERSION = "2025-06-18"
 DEFAULT_LEDGER = REPO_ROOT / "ve_data" / "mcp_receipts" / "mcp_receipts.jsonl"
 INSTRUCTIONS = (
     "Echo Root VE tools provide orientation, gate posture, receipts, and replay checks. "
@@ -224,18 +225,30 @@ def handle_request(message: dict[str, Any]) -> dict[str, Any] | None:
     method = message.get("method")
     msg_id = message.get("id")
     if method == "initialize":
+        params = message.get("params", {})
+        protocol_version = DEFAULT_PROTOCOL_VERSION
+        if isinstance(params, dict):
+            protocol_version = str(params.get("protocolVersion") or protocol_version)
         return {
             "jsonrpc": "2.0",
             "id": msg_id,
             "result": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}},
+                "protocolVersion": protocol_version,
+                "capabilities": {"tools": {"listChanged": False}},
                 "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
                 "instructions": INSTRUCTIONS,
             },
         }
+    if method == "ping":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {}}
     if method == "notifications/initialized":
         return None
+    if method == "resources/list":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"resources": []}}
+    if method == "resources/templates/list":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"resourceTemplates": []}}
+    if method == "prompts/list":
+        return {"jsonrpc": "2.0", "id": msg_id, "result": {"prompts": []}}
     if method == "tools/list":
         return {"jsonrpc": "2.0", "id": msg_id, "result": {"tools": _tool_specs()}}
     if method == "tools/call":

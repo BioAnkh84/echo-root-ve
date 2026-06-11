@@ -16,11 +16,36 @@ import echo_root_mcp  # noqa: E402
 
 class EchoRootMcpTests(unittest.TestCase):
     def test_initialize_returns_tools_capability_and_instructions(self) -> None:
-        response = echo_root_mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        response = echo_root_mcp.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18"},
+            }
+        )
 
+        self.assertEqual(response["result"]["protocolVersion"], "2025-06-18")
         self.assertEqual(response["result"]["serverInfo"]["name"], "echo-root-ve")
         self.assertIn("tools", response["result"]["capabilities"])
+        self.assertFalse(response["result"]["capabilities"]["tools"]["listChanged"])
         self.assertIn("Presence is not proof", response["result"]["instructions"])
+
+    def test_initialize_uses_default_protocol_when_client_omits_version(self) -> None:
+        response = echo_root_mcp.handle_request({"jsonrpc": "2.0", "id": 8, "method": "initialize", "params": {}})
+
+        self.assertEqual(response["result"]["protocolVersion"], echo_root_mcp.DEFAULT_PROTOCOL_VERSION)
+
+    def test_protocol_discovery_helpers_return_empty_lists(self) -> None:
+        ping = echo_root_mcp.handle_request({"jsonrpc": "2.0", "id": 9, "method": "ping"})
+        resources = echo_root_mcp.handle_request({"jsonrpc": "2.0", "id": 10, "method": "resources/list"})
+        templates = echo_root_mcp.handle_request({"jsonrpc": "2.0", "id": 11, "method": "resources/templates/list"})
+        prompts = echo_root_mcp.handle_request({"jsonrpc": "2.0", "id": 12, "method": "prompts/list"})
+
+        self.assertEqual(ping["result"], {})
+        self.assertEqual(resources["result"]["resources"], [])
+        self.assertEqual(templates["result"]["resourceTemplates"], [])
+        self.assertEqual(prompts["result"]["prompts"], [])
 
     def test_tools_list_includes_gate_and_receipts(self) -> None:
         response = echo_root_mcp.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
