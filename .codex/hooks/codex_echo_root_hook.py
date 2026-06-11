@@ -70,9 +70,12 @@ def _score_for_event(event: str, command: Any, dirty: bool) -> dict[str, Any]:
     score.setdefault("delta", 0.16)
     score.setdefault("confidence", "medium")
     score.setdefault("action_lane", "L2_WRITE_ANNOTATE_INDEX")
+    score.setdefault("why", "No event-specific baseline reason was provided.")
+    delta_reasons = [score["why"]]
 
     if dirty:
         score["delta"] = round(float(score["delta"]) + float(modifiers.get("dirty_worktree_delta_add", 0.04)), 3)
+        delta_reasons.append(str(modifiers.get("dirty_worktree_reason", "delta increased because worktree was dirty")))
 
     command_text = str(command).lower()
     destructive_terms = [str(item).lower() for item in modifiers.get("destructive_terms", [])]
@@ -80,9 +83,14 @@ def _score_for_event(event: str, command: Any, dirty: bool) -> dict[str, Any]:
         score["action_lane"] = modifiers.get("destructive_action_lane", "L3_REMOVE_DELETE_RESTRUCTURE")
         score["delta"] = max(float(score["delta"]), float(modifiers.get("destructive_delta_floor", 0.41)))
         score["confidence"] = "medium"
+        delta_reasons.append(str(modifiers.get("destructive_reason", "delta raised because command looked destructive")))
 
     score["baseline_version"] = baseline.get("baseline_version", "unknown")
     score["doctrine"] = baseline.get("doctrine", [])[:4]
+    score["calibration_reason"] = {
+        "rho": f"rho={score['rho']} because {score['why']}",
+        "delta": f"delta={score['delta']} because {'; '.join(delta_reasons)}",
+    }
     return score
 
 
@@ -114,6 +122,7 @@ def _event_request(event: str, payload: dict[str, Any]) -> dict[str, Any]:
         "fallback_status": "none",
         "tool_name": tool_name,
         "files_touched": [],
+        "calibration_reason": score["calibration_reason"],
         "input": {
             "event": event,
             "branch": branch,

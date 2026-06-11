@@ -52,8 +52,10 @@
   },
   "modifiers": {
     "dirty_worktree_delta_add": 0.04,
+    "dirty_worktree_reason": "delta increased because the worktree already had uncommitted changes",
     "destructive_delta_floor": 0.41,
     "destructive_action_lane": "L3_REMOVE_DELETE_RESTRUCTURE",
+    "destructive_reason": "delta raised to abort threshold because command text looks destructive",
     "destructive_terms": [
       "delete",
       "remove-item",
@@ -77,5 +79,9 @@
     "paused_too_much": "lower delta for repeated clean patterns with matching receipts",
     "paused_not_enough": "raise default delta for that event class",
     "receipt_not_useful": "revise receipt fields before raising trust"
+  },
+  "calibration_reason_template": {
+    "rho": "rho={rho} because {why}",
+    "delta": "delta={delta} because {delta_reason}"
   }
 }

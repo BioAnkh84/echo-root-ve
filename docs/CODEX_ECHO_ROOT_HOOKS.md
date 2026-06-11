@@ -91,6 +91,10 @@ The first baseline is intentionally conservative:
 - `PostToolUse` can score stronger when receipts and command results exist.
 - `Stop` can score strongest when tests and receipts stayed clean.
 
+Each hook receipt also records optional `calibration_reason` so old receipts
+can explain why their `rho` and `delta` started where they did. That field is
+optional, so the public v0.1 required receipt schema stays stable.
+
 Tune scores from evidence:
 
 - Raise `rho` after passing tests, verified receipts, hash checks, replay, or

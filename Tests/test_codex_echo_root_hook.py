@@ -29,6 +29,10 @@ class CodexEchoRootHookTests(unittest.TestCase):
         )
         return [json.loads(line) for line in proc.stdout.splitlines() if line.strip().startswith("{")]
 
+    def read_ledger(self, runtime_dir: Path) -> list[dict]:
+        ledger = runtime_dir / "codex_hook_receipts.jsonl"
+        return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+
     def test_session_start_writes_orientation_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             runtime_dir = Path(temp)
@@ -41,11 +45,16 @@ class CodexEchoRootHookTests(unittest.TestCase):
 
     def test_pre_tool_use_defaults_to_pause_posture(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            rows = self.run_hook("PreToolUse", Path(temp))
+            runtime_dir = Path(temp)
+            rows = self.run_hook("PreToolUse", runtime_dir)
+            receipts = self.read_ledger(runtime_dir)
 
             self.assertEqual(rows[-1]["event"], "PreToolUse")
             self.assertEqual(rows[-1]["decision"], "PAUSE")
             self.assertIn("confidence medium/unclear", rows[-1]["reason"])
+            calibration = receipts[-1]["calibration_reason"]
+            self.assertIn("rho=0.72", calibration["rho"])
+            self.assertIn("delta=", calibration["delta"])
 
     def test_score_baseline_records_lessons_learned(self) -> None:
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
