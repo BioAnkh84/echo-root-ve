@@ -62,3 +62,11 @@ All original files are present. Development history is preserved in `archive/`.
 - PS 5.1-safe kernel entrypoint
 - Clean child exec + quiet audit
 - Minimal scaffolding for receipts
+# Unreleased
+
+## Added
+
+- Added v0.1.0 license-readiness package docs: `QUICKSTART.md`, `ARCHITECTURE.md`, `REPO_AUDIT.md`, `RELEASE_EVIDENCE.md`, `ROADMAP.md`, `LICENSE_READINESS_CHECKLIST.md`, `COMMERCIAL_LICENSE_NOTES.md`, and `docs/COMPLIANCE_ALIGNMENT.md`.
+- Added `schemas/echo_root_receipt.schema.json`.
+- Added `echo_root_receipt.py` with append, canonicalization, hash, chain verification, replay, schema validation, and demo gate commands.
+- Added focused receipt/gate tests for `PROCEED`, `PAUSE`, `ABORT`, `SAFE_MODE`/chain failure, schema validation, and replay verification.

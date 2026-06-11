@@ -1,0 +1,16 @@
+{
+  "actor_id": "human-operator",
+  "agent_id": "echo-root-ve-demo-agent",
+  "model_id": "local-demo-model",
+  "provider_id": "local",
+  "route_id": "demo-route",
+  "action_lane": "L1_READ_CLASSIFY",
+  "requested_action": "summarize local release evidence",
+  "consent_scope_present": true,
+  "rho": 0.82,
+  "delta": 0.12,
+  "files_touched": [],
+  "tool_name": "demo_agent",
+  "fallback_status": "none",
+  "dry_run": true
+}
