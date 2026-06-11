@@ -88,6 +88,7 @@ Input
 | [2026-06] | Codex integration should start as receipt-backed observation: repo-local hooks can orient, gate, and log, but hook presence is not authority and hook receipts do not replace human approval. |
 | [2026-06] | Codex scoring baseline should be explicit and tunable from lessons learned: raise rho through evidence, raise delta through authority change or drift, and let human correction recalibrate future trust. |
 | [2026-06] | Calibration reasons belong beside scores in hook receipts so future reviews can see why rho/delta were chosen without changing the public receipt schema. |
+| [2026-06] | Echo Root helps Codex most when its impact is testable: lifecycle receipts should prove orientation, PAUSE on authority change, ABORT on destructive posture, and calibration reason coverage. |
 
 ---
 

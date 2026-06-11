@@ -12,6 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / ".codex" / "hooks" / "codex_echo_root_hook.py"
 BASELINE = REPO / ".codex" / "echo_root_score_baseline.json"
+SELFTEST = REPO / ".codex" / "hooks" / "codex_echo_root_selftest.py"
 
 
 class CodexEchoRootHookTests(unittest.TestCase):
@@ -62,6 +63,21 @@ class CodexEchoRootHookTests(unittest.TestCase):
         self.assertIn("Presence is not proof.", baseline["doctrine"])
         self.assertEqual(baseline["event_defaults"]["PermissionRequest"]["delta"], 0.25)
         self.assertIn("Was the action expected?", baseline["feedback_questions"])
+
+    def test_selftest_reports_codex_workflow_difference(self) -> None:
+        proc = subprocess.run(
+            [sys.executable, str(SELFTEST)],
+            cwd=REPO,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=True,
+        )
+        report = json.loads(proc.stdout)
+
+        self.assertEqual(report["permission_request_decision"], "PAUSE")
+        self.assertEqual(report["destructive_pretool_decision"], "ABORT")
+        self.assertEqual(report["calibration_reason_coverage"], "6/6")
 
 
 if __name__ == "__main__":

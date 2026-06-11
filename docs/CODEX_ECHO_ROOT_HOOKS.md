@@ -51,6 +51,21 @@ each Codex hook event.
 
 - Appends a closeout receipt at the end of a Codex turn.
 
+## Self-Test
+
+Run the local self-test to see whether Echo Root changes the Codex workflow in
+practice:
+
+```text
+py -3.11 .codex/hooks/codex_echo_root_selftest.py
+```
+
+The self-test simulates session start, pre-tool checks, permission request,
+destructive command posture, post-tool receipt, and closeout. It should show
+that permission requests become `PAUSE`, destructive command posture becomes
+`ABORT`, calibration reasons are attached, and lifecycle events become
+hash-chained receipts.
+
 ## What The Hooks Do Not Do
 
 - They do not silently approve commands.

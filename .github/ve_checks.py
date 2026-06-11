@@ -40,6 +40,7 @@ REQUIRED_FILES = [
     ".codex/hooks.json",
     ".codex/echo_root_score_baseline.json",
     ".codex/hooks/codex_echo_root_hook.py",
+    ".codex/hooks/codex_echo_root_selftest.py",
     "schemas/echo_root_receipt.schema.json",
     "echo_root_receipt.py",
     "repo_map.py",
