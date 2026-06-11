@@ -40,6 +40,24 @@ loaded yet. Check:
 4. A fresh project session was opened after the config file was added.
 5. The app can run `py -3.11 .codex/mcp/echo_root_mcp.py` from the repo root.
 
+## Personal Plugin Wrapper
+
+If project/global MCP config is visible on disk but not exposed in the live
+Codex tool registry, use the personal plugin wrapper:
+
+```text
+C:\Users\Richard\plugins\echo-root-ve
+```
+
+The plugin bundles:
+
+- a skill entry point
+- `.mcp.json` pointing at this repo's Echo Root MCP server
+- marketplace metadata under `C:\Users\Richard\.agents\plugins\marketplace.json`
+
+After changing the plugin, refresh Codex by restarting the app and installing
+or reopening **Echo Root VE** from the personal plugin marketplace.
+
 ## Boundary
 
 MCP tools make Echo Root callable. They do not grant authority.

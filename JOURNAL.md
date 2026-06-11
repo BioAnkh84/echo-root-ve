@@ -95,6 +95,7 @@ Input
 | [2026-06] | Live hook activation needs its own probe: simulated hook logic can pass while the current Codex session has not loaded or trusted repo-local hooks. |
 | [2026-06] | If lifecycle hooks do not fire in a Codex surface, expose Echo Root as MCP tools so AI can call orientation, gate, receipt, verify, and probe functions directly. |
 | [2026-06] | Project MCP loading is a separate proof step: built-in Codex tools can appear while repo-local `.codex/config.toml` has not loaded or been trusted yet. |
+| [2026-06] | If repo/global MCP config remains visible-but-not-callable, package Echo Root VE as a personal Codex plugin with a skill and bundled MCP server config. |
 
 ---
 
