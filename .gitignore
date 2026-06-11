@@ -47,6 +47,7 @@ __pycache__/
 ledger.jsonl
 sysinfo.json
 ve_ledger.jsonl
+ve_data/
 receipts/*.jsonl
 receipts/repo_map_latest.json
 receipts/repo_map_*.json
