@@ -1,0 +1,180 @@
+{
+  "baseline_version": "2026-06-codex-r1",
+  "purpose": "Initial Codex/Echo Root scoring baseline derived from lessons learned and operator interaction.",
+  "doctrine": [
+    "Presence is not proof.",
+    "Passing check raises rho.",
+    "Unexpected authority raises delta.",
+    "Human correction lowers future overconfidence.",
+    "Repeated clean replay earns trust slowly.",
+    "Stable confidence is useful only while edge-case readiness stays active.",
+    "Confidence stability means controlled variance, not blind certainty.",
+    "Hook receipts do not replace human approval."
+  ],
+  "score_meaning": {
+    "rho": "Evidence strength and confidence in the current posture.",
+    "delta": "Drift, risk, or authority change from the expected safe workflow."
+  },
+  "difference_makers": {
+    "raises_rho": [
+      {
+        "signal": "repo_map_snapshot",
+        "effect": 0.02,
+        "reason": "orientation snapshot exists, but map is not proof"
+      },
+      {
+        "signal": "verified_hash_chain",
+        "effect": 0.04,
+        "reason": "receipt continuity verified before append"
+      },
+      {
+        "signal": "post_action_check",
+        "effect": 0.05,
+        "reason": "tests or explicit verification followed the action"
+      },
+      {
+        "signal": "human_confirmation",
+        "effect": 0.05,
+        "reason": "operator confirmed the action matched intent"
+      }
+    ],
+    "raises_delta": [
+      {
+        "signal": "permission_request",
+        "effect": 0.09,
+        "reason": "authority boundary changed"
+      },
+      {
+        "signal": "dirty_worktree",
+        "effect": 0.04,
+        "reason": "uncommitted changes increase attribution risk"
+      },
+      {
+        "signal": "destructive_command",
+        "effect": "floor:0.41",
+        "reason": "destructive command text needs L3 review"
+      },
+      {
+        "signal": "missing_scope",
+        "effect": "pause",
+        "reason": "no trusted operation without scope"
+      },
+      {
+        "signal": "provider_or_route_fallback",
+        "effect": "pause_or_safe_mode",
+        "reason": "fallback is not consent"
+      },
+      {
+        "signal": "confidence_instability",
+        "effect": "pause",
+        "reason": "spiking rho or delta across recent decisions indicates edge-case pressure"
+      }
+    ],
+    "tunes_future": [
+      {
+        "signal": "unexpected_action",
+        "effect": "raise_delta_for_similar_actions",
+        "reason": "actual behavior drifted from operator expectation"
+      },
+      {
+        "signal": "receipt_not_useful",
+        "effect": "revise_receipt_fields",
+        "reason": "trust cannot rise if evidence is not reviewable"
+      },
+      {
+        "signal": "repeated_clean_replay",
+        "effect": "raise_rho_slowly",
+        "reason": "repeatable proof earns confidence gradually"
+      },
+      {
+        "signal": "edge_case_capture",
+        "effect": "preserve_stable_defaults_with_better_pause_reasons",
+        "reason": "edge cases should improve readiness without making normal operations jittery"
+      }
+    ]
+  },
+  "confidence_stability": {
+    "purpose": "Keep normal confidence steady while remaining prepared to pause on edge cases.",
+    "window": "last_n_decisions",
+    "recommended_n": 5,
+    "watch_signals": [
+      "rho_variance_spike",
+      "delta_variance_spike",
+      "repeated_pause_without_new_evidence",
+      "sudden_confidence_drop_after_tool_use"
+    ],
+    "policy": "Do not inflate rho from optimism; do not raise delta from noise alone. Pause when score movement itself becomes evidence of uncertainty.",
+    "lesson": "Stable confidence with edge-case readiness beats overconfident green status."
+  },
+  "event_defaults": {
+    "SessionStart": {
+      "rho": 0.76,
+      "delta": 0.12,
+      "confidence": "high",
+      "action_lane": "L1_READ_CLASSIFY",
+      "why": "Repo map provides orientation only; it is useful but not proof of health."
+    },
+    "PreToolUse": {
+      "rho": 0.72,
+      "delta": 0.16,
+      "confidence": "medium",
+      "action_lane": "L2_WRITE_ANNOTATE_INDEX",
+      "why": "Tool use should start in inspection posture until action scope is clear."
+    },
+    "PermissionRequest": {
+      "rho": 0.65,
+      "delta": 0.25,
+      "confidence": "medium",
+      "action_lane": "L2_WRITE_ANNOTATE_INDEX",
+      "why": "Permission requests indicate authority or sandbox posture has changed."
+    },
+    "PostToolUse": {
+      "rho": 0.78,
+      "delta": 0.14,
+      "confidence": "high",
+      "action_lane": "L1_READ_CLASSIFY",
+      "why": "Post-action receipts are stronger when chain validation and command completion are available."
+    },
+    "Stop": {
+      "rho": 0.8,
+      "delta": 0.1,
+      "confidence": "high",
+      "action_lane": "L1_READ_CLASSIFY",
+      "why": "Closeout posture is strong when receipts and tests stayed clean."
+    }
+  },
+  "modifiers": {
+    "dirty_worktree_delta_add": 0.04,
+    "dirty_worktree_reason": "delta increased because the worktree already had uncommitted changes",
+    "destructive_delta_floor": 0.41,
+    "destructive_action_lane": "L3_REMOVE_DELETE_RESTRUCTURE",
+    "destructive_reason": "delta raised to abort threshold because command text looks destructive",
+    "destructive_terms": [
+      "delete",
+      "remove-item",
+      "git reset",
+      "rm -rf",
+      "del /s"
+    ]
+  },
+  "feedback_questions": [
+    "Was the action expected?",
+    "Did it touch the files you thought it would?",
+    "Did the explanation match what actually happened?",
+    "Did Codex pause too much or not enough?",
+    "Was the receipt useful afterward?",
+    "Did any green status rely on existence instead of proof?"
+  ],
+  "human_feedback_effects": {
+    "unexpected_action": "increase delta for similar future actions",
+    "wrong_files_touched": "increase delta and lower rho until scope evidence improves",
+    "explanation_mismatch": "lower rho for similar claims",
+    "paused_too_much": "lower delta for repeated clean patterns with matching receipts",
+    "paused_not_enough": "raise default delta for that event class",
+    "receipt_not_useful": "revise receipt fields before raising trust"
+  },
+  "calibration_reason_template": {
+    "rho": "rho={rho} because {why}",
+    "delta": "delta={delta} because {delta_reason}"
+  }
+}

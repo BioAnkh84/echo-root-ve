@@ -87,6 +87,7 @@ If the audit passes, VE has verified the public harness, ledger checks, and base
 For the v0.1.0 license-readiness demo:
 
 ```powershell
+py -3.11 .\echo_root_cli.py prove --reset
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl demo --scenario proceed
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl demo --scenario pause
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl demo --scenario abort
@@ -94,6 +95,10 @@ py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl verify
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl replay
 py -3.11 -m unittest discover -s Tests
 ```
+
+`echo_root_cli.py prove` is the MCP-independent proof path: it orients on the
+repo, gates sample actions into `PROCEED` / `PAUSE` / `ABORT`, writes
+hash-chained receipts, verifies the chain, and replays decisions.
 
 ---
 
@@ -164,6 +169,7 @@ These are harness guarantees, not certification or safety guarantees.
 | `ve_lessons_ledger.py` | Lessons learned ledger for incidents, fixes, and verified patterns |
 | `ve_habitat_constitution.py` | Constitution audit for Echo Root doctrine rules |
 | `echo_root_receipt.py` | v0.1.0 receipt gate, hash-chain receipt engine, and replay demo |
+| `echo_root_cli.py` | MCP-independent CLI adapter for repo map, gate, receipts, verify, replay, self-test, live probe, and one-command proof |
 | `repo_map.py` | Deterministic repo-map receipt for human/AI orientation |
 | `schemas/echo_root_receipt.schema.json` | v0.1.0 receipt schema |
 | `QUICKSTART.md` | install, demo, verify, replay, and test commands |

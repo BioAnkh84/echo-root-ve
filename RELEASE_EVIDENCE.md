@@ -8,10 +8,10 @@ Target: v0.1.0 License-ready MVP
 py -3.11 -m unittest discover -s Tests
 ```
 
-Result on 2026-06-11:
+Result on 2026-06-12:
 
 ```text
-Ran 39 tests
+Ran 58 tests
 OK
 ```
 
@@ -24,6 +24,20 @@ py -3.11 -m py_compile .\echo_root_receipt.py .\ve_gate_pipeline.py .\ve_gate_re
 Result on 2026-06-11: passed.
 
 ## Demo Commands
+
+MCP-independent proof path:
+
+```powershell
+py -3.11 .\echo_root_cli.py prove --reset
+```
+
+Result on 2026-06-12:
+
+- repo-map orientation receipt generated with `map_hash`
+- decisions produced in order: `PROCEED`, `PAUSE`, `ABORT`
+- receipt chain verification: `ok: true`
+- replay matched every decision
+- claim boundary: MCP is optional for this proof path
 
 ```powershell
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl demo --scenario proceed

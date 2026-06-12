@@ -1,0 +1,68 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3.11 .codex/hooks/codex_echo_root_hook.py SessionStart",
+            "timeout": 30,
+            "statusMessage": "Echo Root orientation receipt"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3.11 .codex/hooks/codex_echo_root_hook.py PreToolUse",
+            "timeout": 30,
+            "statusMessage": "Echo Root pre-action posture"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3.11 .codex/hooks/codex_echo_root_hook.py PermissionRequest",
+            "timeout": 30,
+            "statusMessage": "Echo Root approval posture"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3.11 .codex/hooks/codex_echo_root_hook.py PostToolUse",
+            "timeout": 30,
+            "statusMessage": "Echo Root receipt append"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3.11 .codex/hooks/codex_echo_root_hook.py Stop",
+            "timeout": 30,
+            "statusMessage": "Echo Root closeout receipt"
+          }
+        ]
+      }
+    ]
+  }
+}

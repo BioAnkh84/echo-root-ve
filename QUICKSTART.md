@@ -12,6 +12,16 @@ py -3.11 --version
 
 ## Run The Demo
 
+One-command proof path, useful when MCP tools are not live-exposed:
+
+```powershell
+py -3.11 .\echo_root_cli.py prove --reset
+```
+
+This runs repo orientation, writes `PROCEED` / `PAUSE` / `ABORT` receipts,
+verifies the hash chain, and replays the decisions. MCP is optional for this
+proof path.
+
 ```powershell
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl demo --scenario proceed
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl demo --scenario pause
@@ -34,6 +44,7 @@ py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl replay
 ## Shared Repo Orientation
 
 ```powershell
+py -3.11 .\echo_root_cli.py repo-map --depth 3
 py -3.11 .\repo_map.py --depth 3 --json
 ```
 

@@ -85,6 +85,20 @@ Input
 | [2026-05] | Artifact folders archived, .gitignore updated |
 | [2026-05] | CI/runtime truth cleanup after audit findings |
 | [2026-06] | Release branches must stay linear when `main` requires linear history; resolve README conflicts by preserving both public positioning and release proof paths, then rebase instead of merging. |
+| [2026-06] | Codex integration should start as receipt-backed observation: repo-local hooks can orient, gate, and log, but hook presence is not authority and hook receipts do not replace human approval. |
+| [2026-06] | Codex scoring baseline should be explicit and tunable from lessons learned: raise rho through evidence, raise delta through authority change or drift, and let human correction recalibrate future trust. |
+| [2026-06] | Calibration reasons belong beside scores in hook receipts so future reviews can see why rho/delta were chosen without changing the public receipt schema. |
+| [2026-06] | Echo Root helps Codex most when its impact is testable: lifecycle receipts should prove orientation, PAUSE on authority change, ABORT on destructive posture, and calibration reason coverage. |
+| [2026-06] | Score tuning should name difference makers explicitly: evidence makers raise rho, risk makers raise delta, and feedback makers update future calibration instead of being hand-waved. |
+| [2026-06] | AI-facing docs should be operational packets, not essays: tell the next model what to read, what to run, what changes rho/delta, and when to pause. |
+| [2026-06] | Hook payload handling should be shape-tolerant and privacy-aware: extract useful command/tool hints, store shape hashes, and avoid raw payload dumps. |
+| [2026-06] | Live hook activation needs its own probe: simulated hook logic can pass while the current Codex session has not loaded or trusted repo-local hooks. |
+| [2026-06] | If lifecycle hooks do not fire in a Codex surface, expose Echo Root as MCP tools so AI can call orientation, gate, receipt, verify, and probe functions directly. |
+| [2026-06] | Project MCP loading is a separate proof step: built-in Codex tools can appear while repo-local `.codex/config.toml` has not loaded or been trusted yet. |
+| [2026-06] | If repo/global MCP config remains visible-but-not-callable, package Echo Root VE as a personal Codex plugin with a skill and bundled MCP server config. |
+| [2026-06] | Installed/configured MCP is still not callable proof: Codex Desktop/CLI `0.140.0-alpha.2` launched Echo Root's stdio server but closed stdin before `initialize`, so fallback commands remain the trusted path until live tools appear. |
+| [2026-06] | Confidence should stay stable without going numb: preserve steady rho/delta under normal proof, but treat score spikes or sudden drops as edge-case evidence that should PAUSE and capture a lesson. |
+| [2026-06] | Minimal MCP isolation matters: a one-tool hello-world stdio server also failed to expose in live Codex while direct framed tests passed, shifting blame from Echo Root implementation toward the active Codex external-stdio transport surface. |
 
 ---
 

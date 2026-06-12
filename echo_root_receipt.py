@@ -191,6 +191,10 @@ def build_receipt(request: dict[str, Any], decision: str, reason: list[str], has
         "fallback_status": request.get("fallback_status", "none"),
         "gate_inputs": gate_inputs,
     }
+    if "calibration_reason" in request:
+        receipt["calibration_reason"] = request["calibration_reason"]
+    if "hook_metadata" in request:
+        receipt["hook_metadata"] = request["hook_metadata"]
     receipt["hash_self"] = compute_hash(receipt)
     return receipt
 
