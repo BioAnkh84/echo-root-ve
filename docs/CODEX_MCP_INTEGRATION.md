@@ -72,11 +72,17 @@ Until this is resolved in the active Codex surface, use the repo-local commands
 as the fallback proof path:
 
 ```text
+py -3.11 echo_root_cli.py prove --reset
+py -3.11 echo_root_cli.py gate --action "read release evidence" --scope true --rho 0.82 --delta 0.12
 py -3.11 repo_map.py --depth 3 --json
 py -3.11 .codex/hooks/codex_echo_root_selftest.py
 py -3.11 .codex/hooks/codex_hook_live_probe.py
 py -3.11 .github\ve_checks.py
 ```
+
+`echo_root_cli.py` is the MCP-independent adapter. It uses the same repo-map,
+gate, receipt, verify, replay, self-test, and live-probe logic that the MCP
+server exposes, but through ordinary local commands.
 
 ## Personal Plugin Wrapper
 
