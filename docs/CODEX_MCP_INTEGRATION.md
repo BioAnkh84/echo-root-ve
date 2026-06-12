@@ -60,6 +60,14 @@ That means Codex launched the configured process in the correct repo, then
 closed stdin before sending the MCP `initialize` request. Treat this as a live
 transport activation gap, not proof that the Echo Root server tools are invalid.
 
+On 2026-06-12, a minimal temporary stdio MCP server with one hello-world tool
+also passed direct framed initialize testing and was visible through
+`codex mcp list`, but did not appear as a callable tool in a live Codex session.
+Codex reported handshake timeouts for both the minimal server and Echo Root.
+That lowers the probability of an Echo Root implementation bug and raises the
+probability of an active-surface external stdio MCP limitation or transport
+issue.
+
 Until this is resolved in the active Codex surface, use the repo-local commands
 as the fallback proof path:
 

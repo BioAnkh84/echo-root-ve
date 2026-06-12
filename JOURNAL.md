@@ -98,6 +98,7 @@ Input
 | [2026-06] | If repo/global MCP config remains visible-but-not-callable, package Echo Root VE as a personal Codex plugin with a skill and bundled MCP server config. |
 | [2026-06] | Installed/configured MCP is still not callable proof: Codex Desktop/CLI `0.140.0-alpha.2` launched Echo Root's stdio server but closed stdin before `initialize`, so fallback commands remain the trusted path until live tools appear. |
 | [2026-06] | Confidence should stay stable without going numb: preserve steady rho/delta under normal proof, but treat score spikes or sudden drops as edge-case evidence that should PAUSE and capture a lesson. |
+| [2026-06] | Minimal MCP isolation matters: a one-tool hello-world stdio server also failed to expose in live Codex while direct framed tests passed, shifting blame from Echo Root implementation toward the active Codex external-stdio transport surface. |
 
 ---
 
