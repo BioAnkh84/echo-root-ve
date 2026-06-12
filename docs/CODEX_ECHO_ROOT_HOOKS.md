@@ -140,9 +140,12 @@ Tune scores from evidence:
 - Raise `rho` after passing tests, verified receipts, hash checks, replay, or
   explicit human confirmation.
 - Raise `delta` after escalation, destructive intent, stale context, dirty
-  worktree, fallback, branch mismatch, or unclear scope.
+  worktree, fallback, branch mismatch, unclear scope, or confidence instability
+  across recent decisions.
 - Lower future confidence when human review finds an explanation mismatch.
 - Let repeated clean replay earn trust slowly.
+- Keep normal confidence stable while preserving edge-case readiness; score
+  movement can itself become evidence when it spikes without matching proof.
 
 ## Difference Makers
 
@@ -152,7 +155,8 @@ posture:
 - Evidence makers raise `rho`: repo-map snapshot, verified hash chain,
   post-action checks, and explicit human confirmation.
 - Risk makers raise `delta`: permission requests, dirty worktree, destructive
-  command text, missing scope, and provider or route fallback.
+  command text, missing scope, provider or route fallback, and confidence
+  instability.
 - Feedback makers tune future runs: unexpected action, weak receipts, and
   repeated clean replay.
 

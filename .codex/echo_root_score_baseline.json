@@ -7,6 +7,8 @@
     "Unexpected authority raises delta.",
     "Human correction lowers future overconfidence.",
     "Repeated clean replay earns trust slowly.",
+    "Stable confidence is useful only while edge-case readiness stays active.",
+    "Confidence stability means controlled variance, not blind certainty.",
     "Hook receipts do not replace human approval."
   ],
   "score_meaning": {
@@ -61,6 +63,11 @@
         "signal": "provider_or_route_fallback",
         "effect": "pause_or_safe_mode",
         "reason": "fallback is not consent"
+      },
+      {
+        "signal": "confidence_instability",
+        "effect": "pause",
+        "reason": "spiking rho or delta across recent decisions indicates edge-case pressure"
       }
     ],
     "tunes_future": [
@@ -78,8 +85,26 @@
         "signal": "repeated_clean_replay",
         "effect": "raise_rho_slowly",
         "reason": "repeatable proof earns confidence gradually"
+      },
+      {
+        "signal": "edge_case_capture",
+        "effect": "preserve_stable_defaults_with_better_pause_reasons",
+        "reason": "edge cases should improve readiness without making normal operations jittery"
       }
     ]
+  },
+  "confidence_stability": {
+    "purpose": "Keep normal confidence steady while remaining prepared to pause on edge cases.",
+    "window": "last_n_decisions",
+    "recommended_n": 5,
+    "watch_signals": [
+      "rho_variance_spike",
+      "delta_variance_spike",
+      "repeated_pause_without_new_evidence",
+      "sudden_confidence_drop_after_tool_use"
+    ],
+    "policy": "Do not inflate rho from optimism; do not raise delta from noise alone. Pause when score movement itself becomes evidence of uncertainty.",
+    "lesson": "Stable confidence with edge-case readiness beats overconfident green status."
   },
   "event_defaults": {
     "SessionStart": {

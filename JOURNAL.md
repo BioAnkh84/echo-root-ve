@@ -97,6 +97,7 @@ Input
 | [2026-06] | Project MCP loading is a separate proof step: built-in Codex tools can appear while repo-local `.codex/config.toml` has not loaded or been trusted yet. |
 | [2026-06] | If repo/global MCP config remains visible-but-not-callable, package Echo Root VE as a personal Codex plugin with a skill and bundled MCP server config. |
 | [2026-06] | Installed/configured MCP is still not callable proof: Codex Desktop/CLI `0.140.0-alpha.2` launched Echo Root's stdio server but closed stdin before `initialize`, so fallback commands remain the trusted path until live tools appear. |
+| [2026-06] | Confidence should stay stable without going numb: preserve steady rho/delta under normal proof, but treat score spikes or sudden drops as edge-case evidence that should PAUSE and capture a lesson. |
 
 ---
 

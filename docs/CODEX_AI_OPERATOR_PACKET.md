@@ -73,6 +73,12 @@ Raise `delta` when risk or drift increases:
 - missing scope
 - stale context
 - mismatch between explanation and observed output
+- confidence instability across recent decisions
+
+Keep confidence stable when normal proof stays steady. Do not let a single
+noisy signal inflate `rho` or make `delta` jitter. If score movement itself
+becomes evidence of uncertainty, pause and capture the edge case instead of
+pretending the green state is proven.
 
 Pause when:
 

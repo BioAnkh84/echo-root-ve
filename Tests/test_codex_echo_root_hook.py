@@ -87,6 +87,12 @@ class CodexEchoRootHookTests(unittest.TestCase):
         self.assertEqual(baseline["event_defaults"]["PermissionRequest"]["delta"], 0.25)
         self.assertIn("difference_makers", baseline)
         self.assertIn("Was the action expected?", baseline["feedback_questions"])
+        self.assertIn("confidence_stability", baseline)
+        self.assertIn("confidence_instability", [item["signal"] for item in baseline["difference_makers"]["raises_delta"]])
+        self.assertEqual(
+            baseline["confidence_stability"]["lesson"],
+            "Stable confidence with edge-case readiness beats overconfident green status.",
+        )
 
     def test_selftest_reports_codex_workflow_difference(self) -> None:
         proc = subprocess.run(
