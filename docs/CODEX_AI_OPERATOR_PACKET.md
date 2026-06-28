@@ -6,6 +6,9 @@ safe path from orientation to action.
 ## Startup Sequence
 
 1. Read `README.md`, `QUICKSTART.md`, and `ARCHITECTURE.md`.
+   If the task references Annunimas, ARDA, Mythos, Local Cipher bridge work,
+   or external agent-control-plane repos, also read
+   `docs/ANNUNIMAS_ARDA_ALIGNMENT_MAP.md`.
 2. Run a repo map before broad exploration:
 
 ```text

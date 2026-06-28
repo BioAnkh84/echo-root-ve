@@ -131,6 +131,8 @@ hash-chained receipts, verifies the chain, and replays decisions.
 
 This repository describes the public execution harness. Private habitat work, operator data, and internal scoring details stay outside this repo.
 
+For external agent-control-plane comparisons, see `docs/ANNUNIMAS_ARDA_ALIGNMENT_MAP.md`. It maps Annunimas / ARDA concepts to Echo Root VE receipts, schemas, tests, and authority boundaries without treating external repositories as local authority.
+
 ---
 
 ## Runtime Guarantees
