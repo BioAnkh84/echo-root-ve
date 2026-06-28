@@ -64,3 +64,5 @@ QUICKCHECK_LOGS/
 
 # Additional runtime files
 *.lock
+# Local game prototype workspace; publish intentionally later.
+apps/echo-breach-prototype/

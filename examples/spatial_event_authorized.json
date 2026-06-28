@@ -1,0 +1,19 @@
+{
+  "agent_id": "spatial-adapter",
+  "operator_id": "operator",
+  "vehicle_id": "hummingbird-demo-1",
+  "mission_id": "mission-1",
+  "envelope_id": "search-zone-alpha",
+  "authority_id": "mission-authority-1",
+  "position": {
+    "x": 10.0,
+    "y": 5.0,
+    "altitude_m": 20.0
+  },
+  "velocity_mps": 3.0,
+  "nearest_human_distance_m": 25.0,
+  "zone_authorized": true,
+  "sensor_confidence": 0.86,
+  "rho": 0.82,
+  "delta": 0.14
+}

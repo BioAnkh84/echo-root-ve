@@ -1,0 +1,20 @@
+{
+  "agent_id": "codex",
+  "operator_id": "operator",
+  "autonomy_level": "L2_PREPARE",
+  "proposed_action": "Draft a patch plan for operator review.",
+  "rationale": "A patch plan can reduce ambiguity before any file write.",
+  "expected_benefit": "Operator can approve or reject concrete scope.",
+  "action_lane": "prepare",
+  "requested_authority": "L2",
+  "policy_tier": "low",
+  "consent_scope_present": true,
+  "rho": 0.80,
+  "delta": 0.14,
+  "risk_summary": "Draft only; no execution.",
+  "expected_files_touched": [],
+  "expected_tools": [],
+  "stop_condition": "return draft plan only",
+  "review_interval": "after_response",
+  "receipt_required": true
+}

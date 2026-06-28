@@ -15,6 +15,12 @@ Target: v0.1.0 License-ready MVP
 - [x] CI PR check includes tests and receipt demo verify/replay.
 - [x] Repo-map receipt added for shared human/AI orientation.
 - [x] Repo-map delta receipt added for structure-change orientation.
+- [x] Bounded self-proposal mechanics documented, tested, and receipt-backed.
+- [x] Autonomy charter documents explicit cannot-do boundaries.
+- [x] Scheduled health check path documented as evidence-only automation.
+- [x] Spatial governance adapter documented as envelope review only, not robotics control.
+- [x] External AI authority boundary documented as advisory evidence by default.
+- [x] VSA Tuning Round 1 checklist keeps baseline deviation separate from emotion, diagnosis, identity, or authority claims.
 - [x] Versioned release tag instructions listed below.
 - [ ] Final public/commercial license model reviewed.
 - [ ] Support/SLA placeholder converted to actual commercial terms.

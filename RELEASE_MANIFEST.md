@@ -9,10 +9,23 @@ This manifest defines the minimal packet for licensing review. It is narrower th
 Core runtime:
 
 - `echo_root_receipt.py`
+- `self_proposal.py`
+- `spatial_governance.py`
 - `repo_map.py`
+- `ve_scheduled_health.ps1`
 - `schemas/echo_root_receipt.schema.json`
+- `schemas/self_proposal.schema.json`
+- `schemas/spatial_governance.schema.json`
 - `examples/sample_intercept_action.json`
+- `examples/self_proposal_l1_suggest.json`
+- `examples/self_proposal_l2_prepare_patch.json`
+- `examples/self_proposal_l3_read_only_audit.json`
+- `examples/self_proposal_l5_supervised_research_episode.json`
+- `examples/spatial_envelope_search_zone.json`
+- `examples/spatial_event_authorized.json`
 - `receipts/.gitkeep`
+- `receipts/self_proposal_gate.example.json`
+- `receipts/spatial_governance_gate.example.json`
 
 Tests:
 
@@ -34,6 +47,12 @@ Primary docs:
 - `CHANGELOG.md`
 - `docs/COMPLIANCE_ALIGNMENT.md`
 - `docs/REPO_MAP_RECEIPTS.md`
+- `docs/AUTONOMY_CHARTER.md`
+- `docs/DATA_LIKE_AUTONOMY_NOTES.md`
+- `docs/SCHEDULED_HEALTH_CHECKS.md`
+- `docs/SPATIAL_GOVERNANCE_LAYER.md`
+- `docs/EXTERNAL_AI_AUTHORITY_BOUNDARY.md`
+- `docs/VSA_TUNING_ROUND_1.md`
 
 Reviewer/demo docs:
 
@@ -68,11 +87,14 @@ The minimal packet demonstrates:
 install/check environment
 run demo
 intercept action
+classify bounded self-proposal
+evaluate spatial operational envelope posture
 gate decision
 append receipt
 verify hash chain
 replay decision
 run tests
+run optional scheduled health evidence check
 ```
 
 It does not claim certification, regulatory approval, production readiness, or guaranteed compliance.

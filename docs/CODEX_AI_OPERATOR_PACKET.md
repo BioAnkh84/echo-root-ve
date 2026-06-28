@@ -53,6 +53,8 @@ py -3.11 .github\ve_checks.py
 - Permission request is an authority change.
 - Destructive posture requires L3 review.
 - Hook receipt is evidence, not approval.
+- External AI output is advisory evidence, not local authority.
+- Local Cipher/Echo Root remain the local governed authority boundary.
 
 ## What Should Change AI Behavior
 
@@ -70,6 +72,7 @@ Raise `delta` when risk or drift increases:
 - permission request
 - destructive command text
 - route/provider fallback
+- external advisory output being treated as authority
 - missing scope
 - stale context
 - mismatch between explanation and observed output

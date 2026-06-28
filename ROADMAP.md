@@ -8,6 +8,9 @@
 - Receipt schema
 - Hash-chain receipt engine
 - Replay verification
+- Bounded self-proposal mechanics
+- Autonomy charter and cannot-do boundaries
+- Future-facing spatial governance adapter scaffolding
 - Focused unit tests
 - Release evidence report
 - Commercial license placeholder
@@ -26,4 +29,7 @@
 - Certification claims
 - Guaranteed compliance claims
 - Autonomous destructive operations
+- Open-ended autonomous loops
+- Self-approved scope expansion
+- Flight control, navigation, collision avoidance, mesh networking, or actuator control
 - Production deployment support without a separate hardening pass

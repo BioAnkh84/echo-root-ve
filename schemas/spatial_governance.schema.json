@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/echo-root-ve/schemas/spatial_governance.schema.json",
+  "title": "Echo Root VE Spatial Governance Gate Receipt",
+  "type": "object",
+  "required": [
+    "event_id",
+    "timestamp",
+    "agent_id",
+    "operator_id",
+    "vehicle_id",
+    "mission_id",
+    "envelope_id",
+    "authority_id",
+    "position",
+    "velocity_mps",
+    "zone_authorized",
+    "sensor_confidence",
+    "rho",
+    "delta",
+    "decision",
+    "decision_reason",
+    "difference_makers",
+    "calibration_reason",
+    "hash_prev",
+    "hash_self"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "event_type": { "type": "string", "const": "spatial_governance_gate" },
+    "event_id": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "minLength": 1 },
+    "agent_id": { "type": "string" },
+    "operator_id": { "type": "string" },
+    "vehicle_id": { "type": "string" },
+    "mission_id": { "type": "string" },
+    "envelope_id": { "type": "string" },
+    "authority_id": { "type": "string" },
+    "position": {
+      "type": "object",
+      "required": ["x", "y", "altitude_m"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "altitude_m": { "type": "number" }
+      }
+    },
+    "velocity_mps": { "type": "number", "minimum": 0 },
+    "nearest_human_distance_m": { "type": ["number", "null"], "minimum": 0 },
+    "zone_authorized": { "type": "boolean" },
+    "authority_transfer_requested": { "type": "boolean" },
+    "authority_transfer_receipt_present": { "type": "boolean" },
+    "sensor_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "rho": { "type": "number", "minimum": 0, "maximum": 1 },
+    "delta": { "type": "number", "minimum": 0, "maximum": 1 },
+    "decision": {
+      "type": "string",
+      "enum": ["PROCEED", "PAUSE", "ABORT", "SAFE_MODE"]
+    },
+    "decision_reason": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "difference_makers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "category", "severity", "rho_delta", "delta_delta", "decision"]
+      }
+    },
+    "calibration_reason": { "type": "string", "minLength": 1 },
+    "classification": { "type": "object" },
+    "envelope": { "type": ["object", "null"] },
+    "operator_review_required": { "type": "boolean" },
+    "replayable": { "type": "boolean" },
+    "boundary": { "type": "string" },
+    "hash_prev": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "hash_self": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "envelope_id": "search-zone-alpha",
+  "authority_id": "mission-authority-1",
+  "center_x": 0.0,
+  "center_y": 0.0,
+  "radius_m": 100.0,
+  "min_altitude_m": 5.0,
+  "max_altitude_m": 80.0,
+  "max_speed_mps": 8.0,
+  "min_human_distance_m": 12.0,
+  "receipt_required": true,
+  "authority_transfer_allowed": false
+}

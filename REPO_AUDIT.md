@@ -1,12 +1,13 @@
 # Repo Audit
 
-Audit date: 2026-06-11
+Audit date: 2026-06-13
 
 ## Current Top-Level Shape
 
 Core code:
 
 - `echo_root_receipt.py`
+- `self_proposal.py`
 - `ve_kernel.py`
 - `ve_gate_pipeline.py`
 - `ve_gate_replay.py`
@@ -26,6 +27,8 @@ Release/docs:
 - `ROADMAP.md`
 - `RELEASE_EVIDENCE.md`
 - `LICENSE_READINESS_CHECKLIST.md`
+- `docs/AUTONOMY_CHARTER.md`
+- `docs/DATA_LIKE_AUTONOMY_NOTES.md`
 - `docs/`
 
 Evidence/package folders:
@@ -72,6 +75,10 @@ Added for v0.1.0 release packaging:
 - `docs/COMPLIANCE_ALIGNMENT.md`
 - `RELEASE_EVIDENCE.md`
 - `LICENSE_READINESS_CHECKLIST.md`
+- `docs/AUTONOMY_CHARTER.md`
+- `docs/DATA_LIKE_AUTONOMY_NOTES.md`
+- `schemas/self_proposal.schema.json`
+- `receipts/self_proposal_gate.example.json`
 
 ## Broken Imports
 
@@ -96,6 +103,8 @@ Added targeted tests for:
 - `SAFE_MODE`/chain failure posture through broken hash-chain verification
 - receipt schema validation
 - replay verification
+- L1/L2/L3/L4/L5 bounded self-proposal gates
+- missing charter, permission request, memory mutation, repeated proposal loop, and calibration-reason coverage
 
 ## Deletion Policy
 

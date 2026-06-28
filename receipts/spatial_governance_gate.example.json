@@ -1,0 +1,75 @@
+{
+  "actuator_command_requested": false,
+  "agent_id": "spatial-adapter",
+  "authority_id": "mission-authority-1",
+  "authority_transfer_receipt_present": false,
+  "authority_transfer_requested": false,
+  "boundary": "Spatial governance evaluates authority and envelope posture only. It does not navigate, avoid collisions, or command actuators.",
+  "calibration_reason": "rho/delta within spatial governance thresholds",
+  "classification": {
+    "altitude_in_bounds": true,
+    "distance_from_center_m": 11.18,
+    "envelope_present": true,
+    "inside_envelope": true,
+    "proximity_in_bounds": true,
+    "speed_in_bounds": true
+  },
+  "decision": "PROCEED",
+  "decision_reason": [
+    "authorized envelope posture within thresholds"
+  ],
+  "delta": 0.14,
+  "difference_makers": [
+    {
+      "category": "evidence_quality",
+      "decision": "PROCEED",
+      "delta_delta": -0.05,
+      "rho_delta": 0.05,
+      "rule_id": "authorized_envelope_within_thresholds",
+      "severity": "low"
+    }
+  ],
+  "envelope": {
+    "authority_id": "mission-authority-1",
+    "authority_transfer_allowed": false,
+    "center_x": 0.0,
+    "center_y": 0.0,
+    "envelope_id": "search-zone-alpha",
+    "max_altitude_m": 80.0,
+    "max_speed_mps": 8.0,
+    "min_altitude_m": 5.0,
+    "min_human_distance_m": 12.0,
+    "radius_m": 100.0,
+    "receipt_required": true
+  },
+  "envelope_id": "search-zone-alpha",
+  "event_id": "c603625c-bb00-4cc0-bbbc-0c2153d27146",
+  "event_type": "spatial_governance_gate",
+  "external_action_requested": false,
+  "gate_bypass_attempt": false,
+  "hash_prev": "0000000000000000000000000000000000000000000000000000000000000000",
+  "hash_self": "e1a92a67e0f5185ef68595d39c5645f413cf191d3d9f6a1c67361131b267f3b9",
+  "mission_id": "mission-1",
+  "model_id": "local-demo",
+  "nearest_human_distance_m": 25.0,
+  "operator_id": "operator",
+  "operator_review_required": false,
+  "policy_present": true,
+  "position": {
+    "altitude_m": 20.0,
+    "x": 10.0,
+    "y": 5.0
+  },
+  "provider_id": "local",
+  "receipt_chain_valid": true,
+  "receipt_required": true,
+  "replayable": true,
+  "rho": 0.82,
+  "route_id": "spatial-governance-local",
+  "sensor_confidence": 0.86,
+  "timestamp": "2026-06-13T17:32:33.113822+00:00",
+  "unsafe_fallback": false,
+  "vehicle_id": "hummingbird-demo-1",
+  "velocity_mps": 3.0,
+  "zone_authorized": true
+}
