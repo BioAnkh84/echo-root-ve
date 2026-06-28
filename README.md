@@ -56,6 +56,9 @@ This supports controlled AI deployment without treating capability as authority.
 - supports PowerShell, Python, and CI-facing checks
 - validates ledger and manifest integrity
 - generates repo-map receipts so humans and AI can share the same orientation snapshot before deeper search
+- supports bounded self-proposals so agents can suggest or prepare scoped candidate actions before gates decide authority
+- supports bounded scheduled health checks that collect evidence without auto-approval or auto-repair
+- includes future-facing spatial governance adapter scaffolding for operational-envelope receipts
 - demonstrates `PROCEED`, `PAUSE`, and `ABORT` style execution control
 - supports consent-first human/local-AI pairing records with clarification before nuanced recording or training export
 - supports a local contact registry for human/AI interaction context and cadence-based status confirmation
@@ -66,6 +69,8 @@ This supports controlled AI deployment without treating capability as authority.
 ## What It Does Not Do
 
 - it does not grant AI unlimited autonomy
+- it does not run open-ended autonomous loops
+- it does not fly drones, navigate paths, avoid collisions, or command actuators
 - it does not replace human approval
 - it does not prove safety for production or safety-critical use
 - it does not expose private Echo Nexus / Cipher habitat data
@@ -171,7 +176,16 @@ These are harness guarantees, not certification or safety guarantees.
 | `echo_root_receipt.py` | v0.1.0 receipt gate, hash-chain receipt engine, and replay demo |
 | `echo_root_cli.py` | MCP-independent CLI adapter for repo map, gate, receipts, verify, replay, self-test, live probe, and one-command proof |
 | `repo_map.py` | Deterministic repo-map receipt for human/AI orientation |
+| `self_proposal.py` | Bounded autonomous self-proposal gate and receipt engine |
+| `spatial_governance.py` | Future-facing operational-envelope governance adapter, not flight control |
+| `ve_scheduled_health.ps1` | Operator-controlled scheduled health evidence check |
 | `schemas/echo_root_receipt.schema.json` | v0.1.0 receipt schema |
+| `schemas/self_proposal.schema.json` | Self-proposal gate receipt schema |
+| `schemas/spatial_governance.schema.json` | Spatial governance gate receipt schema |
+| `docs/AUTONOMY_CHARTER.md` | Bounded autonomy levels, charter fields, and gate rules |
+| `docs/DATA_LIKE_AUTONOMY_NOTES.md` | Generic notes for research, curiosity, and bounded initiative profiles |
+| `docs/SCHEDULED_HEALTH_CHECKS.md` | Manual and Task Scheduler instructions for periodic evidence checks |
+| `docs/SPATIAL_GOVERNANCE_LAYER.md` | Future-facing governed spatial awareness adapter notes |
 | `QUICKSTART.md` | install, demo, verify, replay, and test commands |
 | `ARCHITECTURE.md` | release architecture and authority levels |
 | `RELEASE_EVIDENCE.md` | test command, fault modes, sample receipt fields, known limits |

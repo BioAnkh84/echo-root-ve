@@ -183,6 +183,15 @@ Before collecting VSA samples, require:
 4. Self-report fields.
 5. A statement that no diagnosis, deception inference, or authority decision will be made from voice alone.
 
+## Tuning Round 1
+
+Use `docs/VSA_TUNING_ROUND_1.md` for the first tuning checklist.
+
+Round 1 should build separate consenting speaker baselines and compare current
+samples against each speaker's own baseline. Sex/gender or voice-register notes
+may be self-reported calibration context, but they must not become inferred
+identity, emotion, consent, or authority.
+
 ## Research Notes
 
 - Van Puyvelde et al., "Voice Stress Analysis: A New Framework for Voice and Effort in Human Performance," Frontiers in Psychology, 2018, reviews speech changes across physical load, performance-impacting conditions, emotional load, cognitive load, and mixed load contexts: https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2018.01994/full

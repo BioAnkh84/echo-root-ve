@@ -30,6 +30,18 @@ This repository is the VE execution and evidence harness for Echo Root. It demon
 8. Replay reconstructs the signed decision path for later review.
 9. Doctrine memory records mission, constraints, lessons learned, and constitution checks.
 
+The v0.1 release packet also includes bounded self-proposal mechanics:
+
+```text
+agent proposes candidate action
+  -> charter, scope, authority, rho, and delta review
+  -> PROCEED / PAUSE / ABORT / SAFE_MODE
+  -> self_proposal_gate receipt
+```
+
+A self-proposal is not approval. It cannot execute, approve itself, expand
+scope, bypass gates, run indefinitely, or turn L5 into open-ended autonomy.
+
 ## Evidence, Not Claims
 
 | Claim | Evidence Surface |
@@ -44,6 +56,7 @@ This repository is the VE execution and evidence harness for Echo Root. It demon
 | Doctrine is auditable | `ve_habitat_constitution.py`, `VE_HABITAT_DOCTRINE.md` |
 | Lessons are recorded without retraining | `ve_lessons_ledger.py`, `ve_data/habitat_lessons.jsonl` |
 | VSA avoids emotion/diagnosis/authority claims | `VE_VSA_BASELINE_DEVIATION_DOCTRINE.md` |
+| Bounded self-proposals stay gated | `self_proposal.py`, `docs/AUTONOMY_CHARTER.md`, `Tests/test_self_proposal.py` |
 
 ## What Makes It Different
 
@@ -89,6 +102,7 @@ Read these in order:
 6. `VE_GATE_REPLAY.md`
 7. `VE_HABITAT_DOCTRINE.md`
 8. `VE_VSA_BASELINE_DEVIATION_DOCTRINE.md`
+9. `docs/AUTONOMY_CHARTER.md`
 
 ## Ten-Minute Review Question
 

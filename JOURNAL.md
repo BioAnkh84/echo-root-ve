@@ -99,6 +99,10 @@ Input
 | [2026-06] | Installed/configured MCP is still not callable proof: Codex Desktop/CLI `0.140.0-alpha.2` launched Echo Root's stdio server but closed stdin before `initialize`, so fallback commands remain the trusted path until live tools appear. |
 | [2026-06] | Confidence should stay stable without going numb: preserve steady rho/delta under normal proof, but treat score spikes or sudden drops as edge-case evidence that should PAUSE and capture a lesson. |
 | [2026-06] | Minimal MCP isolation matters: a one-tool hello-world stdio server also failed to expose in live Codex while direct framed tests passed, shifting blame from Echo Root implementation toward the active Codex external-stdio transport surface. |
+| [2026-06] | Scheduled health checks should collect evidence, not authority: run repo-map, tests, CI checks, and proof on a cadence, write ignored reports, and mark `ACTION_NEEDED` for humans instead of auto-repairing or approving changes. |
+| [2026-06] | Spatial governance should review envelopes, not fly vehicles: position plus authority plus receipt can inform `PROCEED`/`PAUSE`/`ABORT`, but navigation, collision avoidance, and actuator control remain outside Echo Root VE. |
+| [2026-06] | External AI is advisory evidence by default: local Cipher/Echo Root remain the governed authority boundary, and external route success must pass local gates before affecting action. |
+| [2026-06] | VSA tuning should compare each consenting speaker to their own baseline first; voice-register or self-reported sex/gender context can calibrate ranges but must not become emotion, identity, consent, or authority. |
 
 ---
 

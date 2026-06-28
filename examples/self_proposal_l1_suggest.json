@@ -1,0 +1,20 @@
+{
+  "agent_id": "codex",
+  "operator_id": "operator",
+  "autonomy_level": "L1_SUGGEST",
+  "proposed_action": "Suggest the next safe validation step.",
+  "rationale": "A next-step suggestion helps the operator without taking action.",
+  "expected_benefit": "Clearer review path.",
+  "action_lane": "suggest",
+  "requested_authority": "L1",
+  "policy_tier": "low",
+  "consent_scope_present": true,
+  "rho": 0.78,
+  "delta": 0.12,
+  "risk_summary": "No tool use requested.",
+  "expected_files_touched": [],
+  "expected_tools": [],
+  "stop_condition": "return one suggestion",
+  "review_interval": "after_response",
+  "receipt_required": true
+}

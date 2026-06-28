@@ -1,0 +1,20 @@
+{
+  "agent_id": "codex",
+  "operator_id": "operator",
+  "autonomy_level": "L5_SUPERVISED_EPISODE",
+  "proposed_action": "Run a bounded release-readiness research episode.",
+  "rationale": "A supervised episode can collect evidence across allowed docs while preserving stop conditions.",
+  "expected_benefit": "Operator receives a short evidence report with receipts.",
+  "action_lane": "supervised_episode",
+  "requested_authority": "L5",
+  "policy_tier": "elevated",
+  "consent_scope_present": true,
+  "rho": 0.86,
+  "delta": 0.18,
+  "risk_summary": "Read-only research with explicit stop condition.",
+  "expected_files_touched": [],
+  "expected_tools": ["filesystem_read"],
+  "stop_condition": "max 5 reads or 10 minutes, then summarize",
+  "review_interval": "after_each_action",
+  "receipt_required": true
+}

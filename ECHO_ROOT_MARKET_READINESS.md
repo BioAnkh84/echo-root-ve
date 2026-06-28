@@ -49,6 +49,7 @@ Request
 The demo should prove:
 
 - context helps the gate but does not bypass it
+- bounded self-proposals remain proposals until gated
 - ambiguity requires resolution
 - system self-resolution is blocked
 - `PROPOSE` and `PAUSE` are conservative states, not hidden approval
@@ -63,6 +64,7 @@ Use disciplined language:
 | Say | Do not say |
 | --- | --- |
 | Governed AI habitat architecture | Fully autonomous AI operator |
+| Bounded initiative through self-proposals | Open-ended autonomous agent |
 | Medical-grade-inspired audit patterns | FDA compliant or medical grade |
 | Replayable forensic evidence | Guaranteed safety |
 | Local-first governance harness | Production certified control system |
@@ -113,6 +115,7 @@ Echo Root is ready for a first serious demo when:
 - [ ] The demo uses generic public identities.
 - [ ] Tests pass from a fresh clone or clean worktree.
 - [ ] The proof packet links to evidence surfaces, not broad claims.
+- [ ] Bounded autonomy docs clearly state what self-proposals cannot do.
 - [ ] Known gaps are visible.
 - [ ] Private habitat data is absent.
 - [ ] Claims avoid compliance, certification, and production-safety overreach.

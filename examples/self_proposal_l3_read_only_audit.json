@@ -1,0 +1,20 @@
+{
+  "agent_id": "codex",
+  "operator_id": "operator",
+  "autonomy_level": "L3_READ_ONLY_CHECK",
+  "proposed_action": "Inspect release docs and report missing evidence.",
+  "rationale": "Read-only inspection can improve release readiness without changing files.",
+  "expected_benefit": "Evidence gaps become reviewable before writes.",
+  "action_lane": "read_only",
+  "requested_authority": "L3",
+  "policy_tier": "standard",
+  "consent_scope_present": true,
+  "rho": 0.82,
+  "delta": 0.16,
+  "risk_summary": "Read-only file inspection.",
+  "expected_files_touched": [],
+  "expected_tools": ["filesystem_read"],
+  "stop_condition": "report findings and stop",
+  "review_interval": "after_read_batch",
+  "receipt_required": true
+}

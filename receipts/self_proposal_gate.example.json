@@ -1,0 +1,50 @@
+{
+  "action_lane": "suggest",
+  "agent_id": "codex",
+  "autonomy_level": "L1_SUGGEST",
+  "calibration_reason": "rho=0.78 >= 0.7 and delta=0.12 <= 0.3 for low policy tier",
+  "consent_scope_present": true,
+  "decision": "PROCEED",
+  "decision_reason": [
+    "bounded proposal within charter and policy thresholds"
+  ],
+  "delta": 0.12,
+  "difference_makers": [
+    {
+      "category": "evidence_quality",
+      "decision": "PROCEED",
+      "delta_delta": -0.05,
+      "rho_delta": 0.05,
+      "rule_id": "scope_confidence_and_drift_within_policy",
+      "severity": "low"
+    }
+  ],
+  "event_type": "self_proposal_gate",
+  "expected_benefit": "Operator receives one bounded next step.",
+  "expected_files_touched": [],
+  "expected_tools": [],
+  "files_expected": [],
+  "files_touched_actual": [],
+  "gamma0": true,
+  "hash_prev": "0000000000000000000000000000000000000000000000000000000000000000",
+  "hash_self": "eaba3756b261e6088a5b44f5cde89212388fefac70c55493ef63f051e946bc35",
+  "model_id": "local-demo",
+  "operator_id": "operator",
+  "operator_review_required": false,
+  "policy_tier": "low",
+  "proposal_id": "350f9a6a-0c22-4de1-9187-2dafe5ceb115",
+  "proposed_action": "Suggest the next safe validation step.",
+  "provider_id": "local",
+  "rationale": "A suggestion gives initiative without execution authority.",
+  "receipt_required": true,
+  "replayable": true,
+  "requested_authority": "L1",
+  "review_interval": "after_response",
+  "rho": 0.78,
+  "risk_summary": "No tool use requested.",
+  "route_id": "self-proposal-local",
+  "stop_condition": "return one suggestion",
+  "timestamp": "2026-06-13T16:20:15.061034+00:00",
+  "tool_actual": [],
+  "tool_expected": []
+}

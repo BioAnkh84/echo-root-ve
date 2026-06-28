@@ -22,6 +22,10 @@ This runs repo orientation, writes `PROCEED` / `PAUSE` / `ABORT` receipts,
 verifies the hash chain, and replays the decisions. MCP is optional for this
 proof path.
 
+Bounded self-proposal mechanics are included in the test suite and examples.
+They let an agent propose scoped candidate actions, but not execute, approve,
+or expand scope without the gate and receipt path.
+
 ```powershell
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl demo --scenario proceed
 py -3.11 .\echo_root_receipt.py --ledger .\receipts\demo_receipts.jsonl demo --scenario pause
@@ -62,6 +66,16 @@ py -3.11 .\repo_map.py --depth 3 --delta-from .\receipts\repo_map_latest.json
 ```powershell
 py -3.11 -m unittest discover -s Tests
 ```
+
+## Optional Health Check
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\ve_scheduled_health.ps1
+```
+
+This writes ignored reports under `ve_data/scheduled_health/`. Treat `OK` as
+evidence that the checked commands passed, not release approval. Treat
+`ACTION_NEEDED` as a prompt for human review.
 
 ## Claim Boundary
 

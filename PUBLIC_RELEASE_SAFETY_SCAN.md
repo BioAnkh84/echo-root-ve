@@ -1,6 +1,6 @@
 # Public Release Safety Scan
 
-Scan date: 2026-06-11
+Scan date: 2026-06-13
 
 ## Scope
 
@@ -15,6 +15,7 @@ Patterns checked included:
 - personal names and pairing IDs
 - Tailscale-style private network IPs
 - compliance/certification overclaim language
+- unrestricted autonomy / self-approval language
 
 ## Findings
 
@@ -27,6 +28,7 @@ Items requiring release-boundary handling:
 - `archive/` contains stale historical material, local paths, provider-routing examples, and test-only key names.
 - Generated `ve_data/` records include demo pairing IDs and should not be treated as clean source artifacts.
 - Some docs use "medical-grade-inspired" language. Current docs also state this is not FDA compliant, not certified, and not guaranteed.
+- Bounded self-proposal docs explicitly state that self-proposals cannot approve themselves, bypass gates, expand scope, run indefinitely, or convert L5 into open-ended autonomy.
 
 ## Actions Taken
 
@@ -34,6 +36,7 @@ Items requiring release-boundary handling:
 - Added generated receipt ledgers to `.gitignore`.
 - Updated reviewer demo docs to avoid machine-specific checkout paths.
 - Extended `.github/ve_checks.py` to run unit tests and v0.1 receipt demo verify/replay.
+- Added bounded self-proposal charter, schema, examples, and tests to the release-facing packet.
 - Documented release-boundary risks in `REPO_AUDIT.md`.
 
 ## Recommendation

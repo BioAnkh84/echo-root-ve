@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/echo-root-ve/schemas/self_proposal.schema.json",
+  "title": "Echo Root VE Self Proposal Gate Receipt",
+  "type": "object",
+  "required": [
+    "proposal_id",
+    "timestamp",
+    "agent_id",
+    "operator_id",
+    "autonomy_level",
+    "proposed_action",
+    "rationale",
+    "expected_benefit",
+    "action_lane",
+    "requested_authority",
+    "policy_tier",
+    "consent_scope_present",
+    "rho",
+    "delta",
+    "risk_summary",
+    "expected_files_touched",
+    "expected_tools",
+    "stop_condition",
+    "review_interval",
+    "receipt_required",
+    "decision",
+    "decision_reason",
+    "calibration_reason",
+    "hash_prev",
+    "hash_self"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "event_type": { "type": "string", "const": "self_proposal_gate" },
+    "proposal_id": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "minLength": 1 },
+    "agent_id": { "type": "string" },
+    "operator_id": { "type": "string" },
+    "autonomy_level": {
+      "type": "string",
+      "enum": [
+        "L0_CHAT_ONLY",
+        "L1_SUGGEST",
+        "L2_PREPARE",
+        "L3_READ_ONLY_CHECK",
+        "L4_BOUNDED_WRITE",
+        "L5_SUPERVISED_EPISODE",
+        "L6_SAFE_MODE"
+      ]
+    },
+    "proposed_action": { "type": "string" },
+    "rationale": { "type": "string" },
+    "expected_benefit": { "type": "string" },
+    "action_lane": { "type": "string" },
+    "requested_authority": { "type": "string" },
+    "policy_tier": { "type": "string" },
+    "consent_scope_present": { "type": "boolean" },
+    "gamma0": { "type": "boolean" },
+    "rho": { "type": "number", "minimum": 0, "maximum": 1 },
+    "delta": { "type": "number", "minimum": 0, "maximum": 1 },
+    "risk_summary": { "type": "string" },
+    "expected_files_touched": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "expected_tools": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "stop_condition": { "type": "string" },
+    "review_interval": { "type": "string" },
+    "receipt_required": { "type": "boolean" },
+    "decision": {
+      "type": "string",
+      "enum": ["PROCEED", "PAUSE", "ABORT", "SAFE_MODE"]
+    },
+    "decision_reason": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "calibration_reason": { "type": "string", "minLength": 1 },
+    "difference_makers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule_id", "category", "severity", "rho_delta", "delta_delta", "decision"],
+        "additionalProperties": true,
+        "properties": {
+          "rule_id": { "type": "string" },
+          "category": { "type": "string" },
+          "severity": { "type": "string" },
+          "rho_delta": { "type": "number" },
+          "delta_delta": { "type": "number" },
+          "decision": { "type": "string" }
+        }
+      }
+    },
+    "route_id": { "type": "string" },
+    "model_id": { "type": "string" },
+    "provider_id": { "type": "string" },
+    "files_expected": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "files_touched_actual": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tool_expected": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "tool_actual": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "operator_review_required": { "type": "boolean" },
+    "replayable": { "type": "boolean" },
+    "hash_prev": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "hash_self": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

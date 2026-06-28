@@ -70,3 +70,4 @@ All original files are present. Development history is preserved in `archive/`.
 - Added `schemas/echo_root_receipt.schema.json`.
 - Added `echo_root_receipt.py` with append, canonicalization, hash, chain verification, replay, schema validation, and demo gate commands.
 - Added focused receipt/gate tests for `PROCEED`, `PAUSE`, `ABORT`, `SAFE_MODE`/chain failure, schema validation, and replay verification.
+- Added bounded autonomous self-proposal mechanics in `self_proposal.py`, including autonomy levels, charter evaluation, difference makers, calibration reasons, receipts, schema, examples, and tests.
